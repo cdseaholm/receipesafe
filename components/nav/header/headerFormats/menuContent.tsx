@@ -24,7 +24,7 @@ export default function MenuContent({ session, profile, signOutElement, signIn, 
     const searchParams = useSearchParams();
     const setIsNavigating = useStateStore(state => state.setIsNavigating);
     const isAuthenticated = Boolean(session || userData?._id);
-    const familyRoute = userData ? `/family/${userData.userFamilyID}` : '/'
+    const familyRoute = userData?.userFamilyID ? `/family/${userData.userFamilyID}` : '/family'
 
     const handleNavigationClick = (event: MouseEvent<HTMLAnchorElement>) => {
         if (
@@ -59,7 +59,7 @@ export default function MenuContent({ session, profile, signOutElement, signIn, 
 
     const buttons = [
         isAuthenticated && { value: 'Recipes', label: 'Recipes', icon: recipes, href: '/u/recipes' },
-        isAuthenticated && userData?.userFamilyID && { value: 'Family', label: 'Family', icon: fam, href: familyRoute },
+        isAuthenticated && { value: 'Family', label: 'Family', icon: fam, href: familyRoute },
         { value: 'About', label: 'About', icon: <MdInfoOutline />, href: '/about' },
         { value: 'Pricing', label: 'Pricing', icon: <MdOutlineAttachMoney />, href: '/pricing' }
     ];
