@@ -13,8 +13,8 @@ const FooterColumn = ({ children }: { children: React.ReactNode }) => {
     );
 }
 
-const footerButtonText = "text-footerLink hover:text-accent hover:underline rounded-md p-1 cursor-pointer text-[14px] sm:text-[16px] text-left bg-transparent border-none font-medium";
-const footerSectionText = "text-base sm:text-lg font-semibold underline p-1 text-footerText"
+const footerButtonText = "text-footerLink hover:text-accent hover:underline rounded-md p-1 cursor-pointer text-[16px] sm:text-[20px] text-left bg-transparent border-none font-medium";
+const footerSectionText = "text-xl sm:text-2xl font-bold underline p-1 text-footerText"
 
 export default function MainFooter() {
 
@@ -74,7 +74,7 @@ export default function MainFooter() {
 
     return (
         <footer className="bg-footerBack text-footerText backdrop-blur-sm border-t border-accent/60 w-full py-12 min-h-[30vh] flex flex-col justify-start items-start md:items-center h-content mt-8 shadow-[0_-6px_24px_rgba(44,26,13,0.08)]">
-            <div className="flex flex-col justify-start items-start space-y-12 sm:flex-row sm:justify-start sm:items-start sm:space-x-8 md:space-x-12 w-full h-content sm:px-12">
+            <div className="flex flex-col justify-start items-start space-y-14 sm:space-y-20 sm:flex-row sm:justify-start sm:items-start sm:space-x-8 md:space-x-12 w-full h-content sm:px-12">
                 {sectionsMapped}
             </div>
             <RightsFooter footerButtonText={footerButtonText} />

@@ -17,7 +17,7 @@ export default function CTASection() {
 
             <button
                 type="button"
-                className="flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-accent font-bold text-xl py-5 px-10 rounded-lg transition-all duration-300 hover:scale-105 shadow-xl hover:shadow-2xl group"
+                className="flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-accent font-bold text-xl py-5 px-10 rounded-lg transition-all duration-300 hover:scale-105 shadow-xl hover:shadow-2xl group cursor-pointer"
                 onClick={() => navigate('/register')}
             >
                 <span>Get RecipeSafe</span>
@@ -28,7 +28,7 @@ export default function CTASection() {
                 Already have an account?{' '}
                 <button
                     type="button"
-                    className="underline hover:text-white font-semibold"
+                    className="underline hover:text-white font-semibold cursor-pointer"
                     onClick={() => navigate('/login')}
                 >
                     Sign in here

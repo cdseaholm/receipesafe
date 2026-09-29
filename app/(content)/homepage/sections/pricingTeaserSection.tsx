@@ -50,7 +50,7 @@ export default function PricingTeaserSection() {
 
                     <button
                         type="button"
-                        className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-[#d94f33] text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl group"
+                        className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-[#d94f33] text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl group cursor-pointer"
                         onClick={() => navigate('/register')}
                     >
                         <span className="text-lg">Get Started Now</span>
@@ -59,7 +59,7 @@ export default function PricingTeaserSection() {
 
                     <button
                         type="button"
-                        className="w-full text-accent hover:text-[#d94f33] font-semibold underline"
+                        className="w-full text-accent hover:text-[#d94f33] font-semibold underline cursor-pointer"
                         onClick={() => navigate('/pricing')}
                     >
                         Read pricing notes
