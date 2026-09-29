@@ -6,6 +6,7 @@ import { Session } from "next-auth";
 import { JSX } from "react";
 import { HiOutlineMenu } from "react-icons/hi";
 import { IUser } from "@/models/types/personal/user";
+import ThemeToggle from "@/components/buttons/themeToggle";
 
 export function TabbedDrawer({
     profile,
@@ -79,15 +80,20 @@ export function TabbedDrawer({
             >
 
                 <ScrollArea h="calc(100dvh - 72px)" px="md" w={"100%"} type="auto" offsetScrollbars>
-                    <div className="flex min-h-full flex-col justify-start items-center w-full shadow-[inset_0_2px_8px_rgba(0,0,0,0.10),inset_0_-2px_8px_rgba(0,0,0,0.10)] overflow-x-hidden rounded-md p-1">
-                        <MenuContent
-                            profile={profile}
-                            signOutElement={signOutElement}
-                            session={session}
-                            signIn={signIn}
-                            userData={userInfo}
-                            closeDrawer={() => handleMenuToggle(null)}
-                        />
+                    <div className="flex min-h-full w-full flex-col gap-3 overflow-x-hidden pb-3">
+                        <div className="flex flex-1 flex-col justify-start items-center w-full shadow-[inset_0_2px_8px_rgba(0,0,0,0.10),inset_0_-2px_8px_rgba(0,0,0,0.10)] overflow-x-hidden rounded-md p-1">
+                            <MenuContent
+                                profile={profile}
+                                signOutElement={signOutElement}
+                                session={session}
+                                signIn={signIn}
+                                userData={userInfo}
+                                closeDrawer={() => handleMenuToggle(null)}
+                            />
+                        </div>
+                        <div className="w-full">
+                            <ThemeToggle />
+                        </div>
                     </div>
                 </ScrollArea>
             </Drawer>

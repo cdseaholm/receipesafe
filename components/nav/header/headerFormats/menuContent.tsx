@@ -12,7 +12,6 @@ import { IUser } from "@/models/types/personal/user";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useStateStore } from "@/context/stateStore";
-import ThemeToggle from "@/components/buttons/themeToggle";
 
 const recipes = <PiCookieThin />;
 const fam = <GiFamilyTree />;
@@ -25,6 +24,8 @@ export default function MenuContent({ session, profile, signOutElement, signIn, 
     const setIsNavigating = useStateStore(state => state.setIsNavigating);
     const isAuthenticated = Boolean(session || userData?._id);
     const familyRoute = userData?.userFamilyID ? `/family/${userData.userFamilyID}` : '/family'
+    const displayName = userData?.name || session?.user?.name || '';
+    const firstName = displayName.trim().split(/\s+/)[0];
 
     const handleNavigationClick = (event: MouseEvent<HTMLAnchorElement>) => {
         if (
@@ -78,15 +79,22 @@ export default function MenuContent({ session, profile, signOutElement, signIn, 
 
     const menuContent = (
         <>
+            {isAuthenticated && firstName ? (
+                <div className="w-full px-4 pt-3 pb-2 sm:px-6 text-end">
+                    <p className="text-lg font-semibold text-mainText/80 sm:text-xl">
+                        Welcome {firstName}
+                    </p>
+                </div>
+            ) : null}
+            <Divider my={'md'} w={'100%'} h={'1px'} style={{
+                border: '1px solid color-mix(in srgb, var(--mainText) 24%, transparent)',
+            }} />
             {homeButton.map((button) => (
-                button && <Link key={button.value} href={button.href} onClick={handleNavigationClick} className={`${buttonClass} mt-2 py-3 sm:py-4 w-full`}>
+                button && <Link key={button.value} href={button.href} onClick={handleNavigationClick} className={`${buttonClass} mt-2 py-1 sm:py-2 w-full`}>
                     <span className={`${textClass}`} aria-hidden="true">{button.icon}</span>
                     <span className={`${textClass}`}>{button.label}</span>
                 </Link>
             ))}
-            <div className="w-full px-2 py-2">
-                <ThemeToggle />
-            </div>
             <Divider my={'md'} w={'100%'} h={'1px'} style={{
                 border: '1px solid color-mix(in srgb, var(--mainText) 24%, transparent)',
             }} />
