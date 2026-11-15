@@ -1,3 +1,5 @@
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import { getAuthedUser, getCommunityById, isCommunityAdmin, isCommunityMember, normalizeCommunityText } from "@/lib/community-utils";
 import Community from "@/models/community";
 import Request from "@/models/requests";
@@ -7,6 +9,7 @@ import MongoUser from "@/models/user";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
   const { error, user } = await getAuthedUser(req);
   if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized' });
 
@@ -57,6 +60,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
   const { error, user } = await getAuthedUser(req);
   if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized' });
 

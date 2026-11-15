@@ -1,13 +1,12 @@
 import connectDB from "@/lib/mongodb";
-import { authOptions } from "@/lib/auth/auth-options";
 import Family from "@/models/family";
-import User from "@/models/user";
 import { IFamily } from "@/models/types/family/family";
 import { IFamilyMember } from "@/models/types/family/familyMember";
 import { IUser } from "@/models/types/personal/user";
-import { VerifyPassword } from "@/utils/userHelpers/verifyPassword";
-import { getServerSession } from "next-auth";
 import { Types } from "mongoose";
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { verifyCurrentPassword } from '@/lib/auth/password';
+import { connectedFamilyMember } from '@/lib/family-policy';
 import { normalizeEmail as normalizeSharedEmail, normalizeId as normalizeSharedId } from "@/lib/data-normalization";
 
 export type FamilyActionResult<T = unknown> = {
@@ -32,9 +31,7 @@ export function normalizeId(id: unknown) {
 }
 
 export function getFamilyMember(family: IFamily, user: IUser) {
-    return family.familyMembers?.find(member =>
-        normalizeId(member.familyMemberID) === normalizeId(user._id) || normalizeEmail(member.familyMemberEmail) === normalizeEmail(user.email)
-    ) || null;
+    return connectedFamilyMember(family, user._id);
 }
 
 export function hasAdminPrivilege(member: IFamilyMember | null) {
@@ -44,13 +41,12 @@ export function hasAdminPrivilege(member: IFamilyMember | null) {
 export function hasConnectedMembership(member: IFamilyMember | null, user: IUser) {
     if (!member?.memberConnected) return false;
 
-    return normalizeId(member.familyMemberID) === normalizeId(user._id) || normalizeEmail(member.familyMemberEmail) === normalizeEmail(user.email);
+    return normalizeId(member.familyMemberID) === normalizeId(user._id);
 }
 
 export async function getAuthenticatedFamilyContext(familyId: string) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
+    const userDoc = await getCurrentUser();
+    if (!userDoc) {
         return { user: null, family: null, member: null, message: "Unauthorized" };
     }
 
@@ -62,12 +58,7 @@ export async function getAuthenticatedFamilyContext(familyId: string) {
 
     await connectDB();
 
-    const userDoc = await User.findOne({ email: normalizeEmail(session.user.email) });
-    if (!userDoc) {
-        return { user: null, family: null, member: null, message: "User not found" };
-    }
-
-    const familyDoc = await Family.findById(famIdString);
+    const familyDoc = await Family.findOne({ _id: famIdString, deletedAt: null });
     if (!familyDoc) {
         return { user: userDoc as IUser, family: null, member: null, message: "Family not found" };
     }
@@ -86,7 +77,7 @@ export async function getAuthenticatedFamilyContext(familyId: string) {
 
 export async function verifyUserPassword(user: IUser, password: string | undefined) {
     if (!password) return false;
-    return VerifyPassword(password, user.password);
+    return verifyCurrentPassword(normalizeId(user._id), password);
 }
 
 export function sanitizeFamilyMember(member: IFamilyMember): IFamilyMember {

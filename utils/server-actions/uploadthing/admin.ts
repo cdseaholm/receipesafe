@@ -1,14 +1,14 @@
 'use server'
 
-import { isAppAdminEmail } from '@/lib/admin';
+import { isAppAdmin } from '@/lib/admin';
 import connectDB from '@/lib/mongodb';
 import Recipe from '@/models/recipe';
 import { IRecipe } from '@/models/types/recipes/recipe';
 import { getUploadThingKeyFromUrl } from '@/utils/uploadthing/file-key';
-import { getServerSession } from 'next-auth';
 import { revalidatePath } from 'next/cache';
 import { UTApi } from 'uploadthing/server';
-import { authOptions } from '@/lib/auth/auth-options';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { deleteOwnedUploads } from '@/lib/upload-ownership';
 
 const utapi = new UTApi();
 const LIST_PAGE_SIZE = 500;
@@ -41,13 +41,13 @@ export type UploadBackfillResult = {
 };
 
 async function requireAppAdmin() {
-    const session = await getServerSession(authOptions);
+    const user = await getCurrentUser();
 
-    if (!session?.user?.email || !isAppAdminEmail(session.user.email)) {
-        return { authorized: false, message: 'Admin privileges are required' };
+    if (!user || !isAppAdmin(user)) {
+        return { authorized: false, message: 'Admin privileges are required', userId: '' };
     }
 
-    return { authorized: true, message: '' };
+    return { authorized: true, message: '', userId: String(user._id) };
 }
 
 async function getRecipeImageKeySnapshot() {
@@ -221,14 +221,14 @@ export async function DeleteOrphanUploadThingRecipeImages(fileKeys: string[]) {
             return { success: false, message: 'Selected files are now attached to recipes', deletedCount: 0 };
         }
 
-        const result = await utapi.deleteFiles(orphanKeys);
+        const result = await deleteOwnedUploads(orphanKeys, admin.userId, true);
         revalidatePath('/admin/uploads');
 
         return {
             success: result.success,
             message: result.success
                 ? `Deleted ${result.deletedCount} orphaned upload${result.deletedCount === 1 ? '' : 's'}`
-                : 'UploadThing did not delete the selected files',
+                : result.message,
             deletedCount: result.deletedCount,
         };
     } catch (error) {

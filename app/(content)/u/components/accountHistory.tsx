@@ -7,6 +7,7 @@ import { IReview } from "@/models/types/misc/review";
 import { Accordion } from '@mantine/core';
 import SearchBar from "@/components/misc/searchBox/searchBar";
 import { ICommunity } from "@/models/types/community/community";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
 
 interface HistoryTabContentProps {
     recipesCreated: IRecipe[];
@@ -33,15 +34,15 @@ export default function HistoryTabContent({
     const groupNames = [
         { 
             label: 'Recipes Created', 
-            items: recipesCreated.map(r => ({ title: r.name, link: `/u/recipes/${r._id}`, date: r.createdAt })) 
+            items: recipesCreated.map(r => ({ title: r.name, link: `/view/recipe/${r._id}`, date: r.createdAt }))
         },
         { 
             label: 'Communities Created', 
-            items: communitiesCreated.map(c => ({ title: c.name, link: `/u/communities/${c._id}`, date: c.createdAt })) 
+            items: communitiesCreated.map(c => ({ title: c.name, link: `/communities/${c._id}`, date: c.createdAt }))
         },
         { 
             label: 'Communities Joined', 
-            items: communitiesJoined.map(c => ({ title: c.name, link: `/u/communities/${c._id}`, date: c.createdAt })) 
+            items: communitiesJoined.map(c => ({ title: c.name, link: `/communities/${c._id}`, date: c.createdAt }))
         },
         { 
             label: 'Inquiries Made', 
@@ -53,7 +54,7 @@ export default function HistoryTabContent({
         },
     ];
 
-    const filteredGroups = groupNames.map(group => ({
+    const filteredGroups = groupNames.filter(group => COMMUNITIES_ENABLED || !group.label.startsWith('Communities')).map(group => ({
         ...group,
         items: group.items.filter(item => 
             item.title.toLowerCase().includes(search.toLowerCase().trim())

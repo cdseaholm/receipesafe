@@ -56,7 +56,7 @@ export default function InvitePage({ token, userInfo }: { token: string | null, 
             return false;
         }
 
-        const accepted = await InviteRegCheck({ invite: inviteToAccept }) as { status: boolean, message?: string };
+        const accepted = await InviteRegCheck({ invite: inviteToAccept }) as { status: boolean, message?: string, verificationRequired?: boolean };
         if (!accepted.status) {
             toast.error(accepted.message || 'Issue accepting invite');
             return false;
@@ -128,7 +128,7 @@ export default function InvitePage({ token, userInfo }: { token: string | null, 
                 return;
             }
 
-            const registerHelp = await RegisterHelper({ namePassed: name, emailPassed: email, pwPassed: password, invite: invite }) as { status: boolean, newUser: IUser | null, message?: string };
+            const registerHelp = await RegisterHelper({ namePassed: name, emailPassed: email, pwPassed: password, invite: invite }) as { status: boolean, newUser: IUser | null, message?: string, verificationRequired?: boolean };
 
             if (!registerHelp) {
                 toast.error('Error registering regsiter null');
@@ -150,7 +150,7 @@ export default function InvitePage({ token, userInfo }: { token: string | null, 
                         return;
                     }
 
-                    const accepted = await InviteRegCheck({ invite }) as { status: boolean, message?: string };
+                    const accepted = await InviteRegCheck({ invite }) as { status: boolean, message?: string, verificationRequired?: boolean };
                     if (!accepted.status) {
                         toast.error(accepted.message || 'Issue accepting invite');
                         registeringRef.current = false;
@@ -175,36 +175,11 @@ export default function InvitePage({ token, userInfo }: { token: string | null, 
                 return;
             }
 
-            const createdUser = registerHelp.newUser;
-
-            if (!createdUser) {
-                toast.error('Error creatin user');
-                registeringRef.current = false;
-                setGlobalLoading(false);
-                return;
-            }
-
-            const signInAttempt = await SignInHelper({ emailPassed: email, pwPassed: password }) as { status: boolean };
-
-            if (!signInAttempt || !signInAttempt.status) {
-                toast.error('Error signing in');
-                registeringRef.current = false;
-                setGlobalLoading(false);
-                return;
-            }
-
-            useUserStore.getState().setUserInfo(createdUser)
-
             registrationCompleteRef.current = true;
-            setInvite(null);
-            toast.success('Registered and Signed in!');
-            inviteRegisterForm.reset();
-            inviteRegisterForm.clearErrors();
-            await update();
-            resetZoom(width, false);
-            router.replace('/u/profile')
-            setGlobalLoading(false)
-
+            toast.success('Check your email to verify your account. Your invitation will be available after signing in.');
+            setGlobalLoading(false);
+            registeringRef.current = false;
+            router.replace(`/verify-email?email=${encodeURIComponent(email)}`);
         } catch (error) {
             registeringRef.current = false;
             setGlobalLoading(false);

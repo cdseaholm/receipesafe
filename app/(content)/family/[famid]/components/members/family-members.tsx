@@ -34,7 +34,7 @@ export default function FamilyMembers({ userInfo, family }: { userInfo: IUser, f
     const memberNameLength = memberNames ? memberNames.length : 0;
     const familyID = userInfo ? userInfo.userFamilyID : '';
     const setOpenAddFamMemsModal = useModalStore(state => state.setOpenAddFamMemsModal);
-    const adminPermission = userInfo && family ? family.familyMembers.find((mem) => mem.familyMemberEmail === userInfo.email)?.permissionStatus === 'Admin' : false;
+    const adminPermission = Boolean(userInfo && familyToRender?.familyMembers.find(mem => mem.memberConnected && mem.familyMemberID === userInfo._id)?.permissionStatus === 'Admin');
     const membersPerPage = 10;
     const [currentPage, setCurrentPage] = useState(1);
     const [roleDrafts, setRoleDrafts] = useState<Record<string, IFamilyMember["permissionStatus"]>>({});

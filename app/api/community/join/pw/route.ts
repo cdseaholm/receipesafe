@@ -1,3 +1,5 @@
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import connectDB from "@/lib/mongodb";
 import { getAuthedUser, isCommunityMember } from "@/lib/community-utils";
 import Community from "@/models/community";
@@ -7,6 +9,7 @@ import MongoUser from "@/models/user";
 import { compare } from "bcrypt-ts";
 
 export async function PUT(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
 
     const { error, user } = await getAuthedUser(req);
     if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized' });

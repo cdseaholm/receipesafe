@@ -1,98 +1,39 @@
-import connectDB from "@/lib/mongodb";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth/auth-options";
-import { IFamily } from "@/models/types/family/family";
-import Family from "@/models/family";
-import { ObjectId } from "mongodb";
-import { compareSync } from "bcrypt-ts";
-
-// Helper function to update family member info
-async function updateFamilyMember(
-    familyID: string,
-    userID: string,
-    field: 'familyMemberName' | 'familyMemberEmail',
-    value: string
-) {
-    if (!familyID) return;
-
-    const family = await Family.findOne({ _id: new ObjectId(familyID) }) as IFamily | null;
-    if (!family?.familyMembers?.length) return;
-
-    const memberIndex = family.familyMembers.findIndex(mem => mem.familyMemberID === userID);
-    if (memberIndex === -1) return;
-
-    // Update the specific field
-    family.familyMembers[memberIndex][field] = value;
-
-    await Family.updateOne(
-        { _id: family._id },
-        { $set: { familyMembers: family.familyMembers } }
-    );
-}
-
+import { accountJSON } from '@/lib/auth/request-body';
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { validEmail } from '@/lib/auth/policy';
+import { updateProfile } from '@/lib/auth/profile';
+import { hashPassword, verifyCurrentPassword } from '@/lib/auth/password';
+import { issueVerification } from '@/lib/auth/verification';
+import { consumeRateLimit } from '@/lib/security/rate-limit';
+import User from '@/models/user';
+import { isSameOriginJSON } from '@/lib/security/request';
 export async function PUT(req: NextRequest) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized' });
+  if (!isSameOriginJSON(req)) return NextResponse.json({status: 403, message: 'Invalid request origin'}, {status: 403});
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({status: 401, message: 'Unauthorized'}, {status: 401});
+  const limit = await consumeRateLimit(`account:update:${user._id}`, {limit: 10, windowMs: 15 * 60_000});
+  if (!limit.allowed) return NextResponse.json({status: 429, message: 'Please wait before trying again'}, {status: 429});
+  try {
+    const {which, itemToEdit, passwordEntered} = await accountJSON(req);
+    if (which === 'name' || which === 'bio' || which === 'profileImage') {
+      await updateProfile(user, {[which]: itemToEdit});
+      return NextResponse.json({status: 200, message: 'Profile updated'});
     }
-
-    try {
-        const body = await req.json();
-        const { which, itemToEdit, passwordEntered } = body as { which: 'name' | 'email', itemToEdit: string, passwordEntered: string };
-
-        await connectDB();
-
-        const user = await MongoUser.findOne({ email: session.user.email }) as IUser | null;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found' });
-        }
-
-        const passwordMatch = compareSync(passwordEntered, user.password);
-
-        if (!passwordMatch) {
-            console.log('Incorrect password entered for user edit:', session.user.email);
-            return NextResponse.json({ status: 403, message: 'Incorrect password' });
-        }
-
-        console.log(`Editing user ${session.user.email}: field ${which} to ${itemToEdit}`);
-
-        // Handle name update
-        if (which === 'name') {
-            console.log('Updating name to ', itemToEdit);
-            await MongoUser.updateOne({ _id: user._id }, { $set: { name: itemToEdit } });
-            await updateFamilyMember(user.userFamilyID, user._id.toString(), 'familyMemberName', itemToEdit);
-            return NextResponse.json({ status: 200, message: 'Success!' });
-        }
-
-        // Handle email update
-        if (which === 'email') {
-            console.log('Updating email to ', itemToEdit);
-            const existingUser = await MongoUser.findOne({ email: itemToEdit }) as IUser | null;
-
-            if (existingUser) {
-                return NextResponse.json({ status: 402, message: 'User already exists with that email' });
-            }
-
-            await MongoUser.updateOne({ _id: user._id }, { $set: { email: itemToEdit } });
-            await updateFamilyMember(user.userFamilyID, user._id.toString(), 'familyMemberEmail', itemToEdit);
-            return NextResponse.json({ status: 200, message: 'Success!' });
-        }
-
-        if (which === 'password') {
-            console.log('Updating password');
-            await MongoUser.updateOne({ _id: user._id }, { $set: { password: itemToEdit } });
-            return NextResponse.json({ status: 200, message: 'Success!' });
-        }
-
-        return NextResponse.json({ status: 400, message: 'Invalid field to update' });
-
-    } catch (error: any) {
-        console.error('Error editing user:', error);
-        return NextResponse.json({ status: 500, message: 'Error editing user' });
+    if (which !== 'email' && which !== 'password') return NextResponse.json({status: 400, message: 'Invalid field'}, {status: 400});
+    if (!await verifyCurrentPassword(String(user._id), passwordEntered)) return NextResponse.json({status: 403, message: 'Current password is incorrect. Google-only accounts can use email recovery to set a password first.'}, {status: 403});
+    if (which === 'email') {
+      const email = validEmail(itemToEdit);
+      if (!email || email === user.email) return NextResponse.json({status: 400, message: 'Enter a different valid email address'}, {status: 400});
+      if (await User.exists({email})) return NextResponse.json({status: 409, message: 'That email is unavailable'}, {status: 409});
+      await issueVerification(String(user._id), 'email-change', email);
+      return NextResponse.json({status: 200, message: 'Check the new address to confirm the change. Your current address remains active until confirmation.'});
     }
+    const password = await hashPassword(itemToEdit);
+    await User.updateOne({_id: user._id}, {$set: {password}, $inc: {sessionVersion: 1},
+      $unset: {emailVerificationTokenHash: '', emailVerificationExpiresAt: '', emailVerificationPurpose: '', pendingEmail: '', resetPasswordToken: '', resetPasswordExpires: ''}});
+    return NextResponse.json({status: 200, message: 'Password changed. Sign in again.', signInRequired: true});
+  } catch (error) {
+    return NextResponse.json({status: 400, message: error instanceof Error ? error.message : 'Unable to update account'}, {status: 400});
+  }
 }

@@ -1,102 +1,36 @@
-import { Metadata } from "next";
-import { getServerSession } from "next-auth";
-import { notFound } from "next/navigation";
-import { ObjectId } from "mongodb";
-import connectDB from "@/lib/mongodb";
-import { authOptions } from "@/lib/auth/auth-options";
-import Recipe from "@/models/recipe";
-import User from "@/models/user";
-import { IRecipe } from "@/models/types/recipes/recipe";
-import { IUser } from "@/models/types/personal/user";
-import { serializeDoc } from "@/utils/data/seralize";
-import RecipeDetail from "./components/recipe-detail";
-import { createPageMetadata } from "@/lib/metadata";
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import { cache } from 'react';
+import { ObjectId } from 'mongodb';
+import User from '@/models/user';
+import RecipeDetail from './components/recipe-detail';
+import { createPageMetadata } from '@/lib/metadata';
+import { getSessionUser } from '@/lib/data/user';
+import { getRecipeVisibleToUser } from '@/lib/data/recipes';
 
-type RecipeViewPageParams = {
-    params: Promise<{ recipeid: string }>;
-};
+type Params = { params: Promise<{ recipeid: string }> };
+const readRecipe = cache(async (id: string) => {
+    const currentUser = await getSessionUser();
+    const recipe = await getRecipeVisibleToUser(id, currentUser);
+    return { currentUser, recipe };
+});
 
-function userCanViewRecipe(recipe: IRecipe, user: IUser | null) {
-    if (!recipe.secret) return true;
-    if (!user) return false;
-    if (recipe.creatorID === user._id) return true;
-    return recipe.secretViewerIDs?.includes(user._id) || recipe.secretViewerIDs?.includes(user.email);
-}
-
-async function getRecipeViewData(recipeid: string) {
-    if (!ObjectId.isValid(recipeid)) {
-        notFound();
-    }
-
-    await connectDB();
-
-    const session = await getServerSession(authOptions);
-    const [recipeDoc, currentUserDoc] = await Promise.all([
-        Recipe.findById(recipeid).lean(),
-        session?.user?.email ? User.findOne({ email: session.user.email }).lean() : null,
-    ]);
-
-    if (!recipeDoc) {
-        notFound();
-    }
-
-    const recipe = serializeDoc<IRecipe>(recipeDoc);
-    const currentUser = currentUserDoc
-        ? { ...serializeDoc<IUser>(currentUserDoc), password: '' }
-        : null;
-
-    if (!userCanViewRecipe(recipe, currentUser)) {
-        notFound();
-    }
-
-    const creatorDoc = recipe.creatorID && ObjectId.isValid(recipe.creatorID)
-        ? await User.findById(recipe.creatorID).select('name').lean()
-        : null;
-
-    return {
-        recipe,
-        currentUser,
-        creatorName: creatorDoc?.name || 'Account Deleted',
-    };
-}
-
-export async function generateMetadata({ params }: RecipeViewPageParams): Promise<Metadata> {
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
     const { recipeid } = await params;
-
-    if (!ObjectId.isValid(recipeid)) {
-        return createPageMetadata({
-            title: "Recipe",
-            description: "View a preserved recipe, including ingredients, instructions, notes, and recipe details.",
-        });
-    }
-
-    try {
-        await connectDB();
-        const recipeDoc = await Recipe.findById(recipeid).select('name description secret').lean();
-        const recipe = recipeDoc ? serializeDoc<Pick<IRecipe, 'name' | 'description' | 'secret'>>(recipeDoc) : null;
-
-        return createPageMetadata({
-            title: recipe?.name || "Recipe",
-            description: recipe?.description || "View this preserved recipe, including ingredients, instructions, notes, and recipe details.",
-            robots: recipe?.secret ? { index: false, follow: true } : undefined,
-        });
-    } catch {
-        return createPageMetadata({
-            title: "Recipe",
-            description: "View a preserved recipe, including ingredients, instructions, notes, and recipe details.",
-        });
-    }
+    const { recipe } = await readRecipe(recipeid);
+    // Unauthorized private records also get generic metadata.
+    return createPageMetadata({
+        title: recipe?.name || 'Recipe',
+        description: recipe?.description || 'View a preserved recipe.',
+        robots: recipe?.secret || !recipe ? { index: false, follow: false } : undefined,
+    });
 }
 
-export default async function Page({ params }: RecipeViewPageParams) {
+export default async function Page({ params }: Params) {
     const { recipeid } = await params;
-    const { recipe, currentUser, creatorName } = await getRecipeViewData(recipeid);
-
-    return (
-        <RecipeDetail
-            recipe={recipe}
-            currentUser={currentUser}
-            creatorName={creatorName}
-        />
-    );
+    const { currentUser, recipe } = await readRecipe(recipeid);
+    if (!recipe) notFound();
+    const creator = recipe.creatorID && ObjectId.isValid(recipe.creatorID)
+        ? await User.findById(recipe.creatorID).select('name').lean() : null;
+    return <RecipeDetail recipe={recipe} currentUser={currentUser} creatorName={creator?.name || 'Account Deleted'} />;
 }

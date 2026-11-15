@@ -1,74 +1,43 @@
-'use server'
+'use server';
 
-import { revalidatePath } from "next/cache";
-import Family from "@/models/family";
-import {
-    getAuthenticatedFamilyContext,
-    getRevalidationPath,
-    hasAdminPrivilege,
-    sanitizeFamilyMember,
-    verifyUserPassword,
-} from "./utils";
-import { IFamilyMember } from "@/models/types/family/familyMember";
+import { revalidatePath } from 'next/cache';
+import { FAMILY_ROLES, familyMemberKey, hasConnectedAdmin } from '@/lib/family-policy';
+import { familyFailure, withFamilyMutation } from '@/lib/family-mutations';
+import { getRevalidationPath, sanitizeFamilyMember, verifyUserPassword } from './utils';
+import type { IFamilyMember } from '@/models/types/family/familyMember';
+import Invite from '@/models/invite';
 
 export async function UpdateFamilyName(familyId: string, newName: string, adminPassword: string, route: string) {
-    if (!newName?.trim()) {
-        return { success: false, message: "Family name is required" };
-    }
-
-    const { user, family, member, message } = await getAuthenticatedFamilyContext(familyId);
-    if (!user || !family) return { success: false, message };
-    if (!hasAdminPrivilege(member)) return { success: false, message: "Admin privileges are required" };
-    if (!(await verifyUserPassword(user, adminPassword))) return { success: false, message: "Password is incorrect" };
-
-    try {
+    if (typeof newName !== 'string' || !newName.trim() || newName.trim().length > 100) return familyFailure('Family name must be 1–100 characters');
+    const result = await withFamilyMutation(familyId, async ({ user, family, member, session }) => {
+        if (member.permissionStatus !== 'Admin') return familyFailure('Admin privileges are required');
+        if (!(await verifyUserPassword(user, adminPassword))) return familyFailure('Password is incorrect. Google users can set a password from account recovery first.');
         family.name = newName.trim();
-        await family.save();
-        revalidatePath(getRevalidationPath(route, `/family/${familyId}/settings`));
-        return { success: true, message: "Family name updated successfully", family: JSON.parse(JSON.stringify(family)) };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: "Failed to update family name" };
-    }
+        await family.save({ session });
+        return { success: true, message: 'Family name updated successfully', members: family.familyMembers, family: JSON.parse(JSON.stringify(family)) };
+    });
+    if (result.success) revalidatePath(getRevalidationPath(route, `/family/${familyId}/settings`));
+    return result;
 }
 
-export async function UpdateFamilyMemberStatuses(familyId: string, membersToChange: IFamilyMember[], adminPassword: string, route: string) {
-    if (!membersToChange?.length) {
-        return { success: false, message: "No members selected", members: [] as IFamilyMember[] };
-    }
-
-    const { user, family, member, message } = await getAuthenticatedFamilyContext(familyId);
-    if (!user || !family) return { success: false, message, members: [] as IFamilyMember[] };
-    if (!hasAdminPrivilege(member)) return { success: false, message: "Admin privileges are required", members: [] as IFamilyMember[] };
-    if (!(await verifyUserPassword(user, adminPassword))) return { success: false, message: "Password is incorrect", members: [] as IFamilyMember[] };
-
-    try {
-        const currentMembers = family.familyMembers.map(existing => sanitizeFamilyMember(existing as IFamilyMember));
-        const changeById = new Map(membersToChange.map(changed => [changed.familyMemberID, sanitizeFamilyMember(changed)]));
-        const updatedMembers = currentMembers.map(existing => {
-            const changed = changeById.get(existing.familyMemberID);
-            if (!changed) return existing;
-            return {
-                ...existing,
-                permissionStatus: changed.permissionStatus,
-            };
-        }) as IFamilyMember[];
-
-        if (!updatedMembers.some(familyMember => familyMember.permissionStatus === "Admin")) {
-            return { success: false, message: "At least one admin is required", members: currentMembers };
+export async function UpdateFamilyMemberStatuses(familyId: string, changes: IFamilyMember[], adminPassword: string, route: string) {
+    if (!Array.isArray(changes) || !changes.length || changes.length > 100 || changes.some(item => !item || !FAMILY_ROLES.includes(item.permissionStatus))) return familyFailure('Select valid member roles');
+    const result = await withFamilyMutation(familyId, async ({ user, family, member, session }) => {
+        if (member.permissionStatus !== 'Admin') return familyFailure('Admin privileges are required');
+        if (!(await verifyUserPassword(user, adminPassword))) return familyFailure('Password is incorrect. Google users can set a password from account recovery first.');
+        const current = family.familyMembers.map(sanitizeFamilyMember);
+        const updates = new Map(changes.map(item => [familyMemberKey(item), item.permissionStatus]));
+        if (changes.some(item => !familyMemberKey(item) || !current.some(existing => familyMemberKey(existing) === familyMemberKey(item)))) return familyFailure('One or more members do not belong to this family');
+        const updated = current.map(item => ({ ...item, permissionStatus: updates.get(familyMemberKey(item)) || item.permissionStatus }));
+        if (!hasConnectedAdmin(updated)) return familyFailure('At least one connected admin is required');
+        family.familyMembers = updated;
+        await family.save({ session });
+        for (const pending of updated.filter(item => !item.memberConnected)) {
+            await Invite.updateMany({ familyID: familyId, inviteType: 'family', email: pending.familyMemberEmail },
+                { $set: { permissionStatus: pending.permissionStatus } }, { session });
         }
-
-        const existingIds = new Set(currentMembers.map(familyMember => familyMember.familyMemberID));
-        if (membersToChange.some(changed => !existingIds.has(changed.familyMemberID))) {
-            return { success: false, message: "One or more members do not belong to this family", members: currentMembers };
-        }
-
-        await Family.updateOne({ _id: family._id }, { $set: { familyMembers: updatedMembers } });
-        revalidatePath(getRevalidationPath(route, `/family/${familyId}/settings`));
-
-        return { success: true, message: "Member statuses updated successfully", members: updatedMembers };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: "Failed to update member statuses", members: [] as IFamilyMember[] };
-    }
+        return { success: true, message: 'Member statuses updated successfully', members: updated };
+    });
+    if (result.success) revalidatePath(getRevalidationPath(route, `/family/${familyId}/settings`));
+    return result;
 }

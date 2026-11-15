@@ -1,63 +1,21 @@
-import connectDB from "@/lib/mongodb";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeInviteEmail, removePendingInviteMember } from "@/lib/invite-utils";
-import Invite from "@/models/invite";
-import { IInvite } from "@/models/types/misc/invite";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { normalizeInviteEmail, removePendingInviteMember } from '@/lib/invite-utils';
+import Invite from '@/models/invite';
+import { isSameOriginJSON } from '@/lib/security/request';
 
-function inviteResponse(body: { status: number; message: string }, status = body.status) {
-    return NextResponse.json(body, { status });
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
+    const response = (status: number, message: string) => NextResponse.json({ status, message }, { status });
+    if (!isSameOriginJSON(request)) return response(403, 'Use a same-origin JSON request');
+    const user = await getCurrentUser();
+    if (!user) return response(401, 'Sign in with the verified invited email');
     try {
-        const secret = process.env.NEXTAUTH_SECRET || '';
-
-        if (!secret) {
-            return inviteResponse({ status: 401, message: 'Incorrect secret' });
-        }
-
-        const session = await getServerSession(authOptions);
-
-        if (!session) {
-            return inviteResponse({ status: 401, message: 'Unauthorized' });
-        }
-
-        const email = normalizeInviteEmail(session.user?.email);
-        if (!email) {
-            return inviteResponse({ status: 401, message: 'Unauthorized' });
-        }
-
-        const body = await req.json();
-        const inviteToken = typeof body.token === 'string' ? body.token : '';
-
-        if (!inviteToken) {
-            return inviteResponse({ status: 400, message: 'Invite token is required' });
-        }
-
-        await connectDB();
-
-        const invite = await Invite.findOne({ token: inviteToken }) as IInvite | null;
-
-        if (!invite) {
-            return inviteResponse({ status: 404, message: 'Invite not found' });
-        }
-
-        if ((invite.inviteType || 'family') !== 'family') {
-            return inviteResponse({ status: 400, message: 'This is not a family invite' });
-        }
-
-        if (normalizeInviteEmail(invite.email) !== email) {
-            return inviteResponse({ status: 403, message: 'Sign in as the invited user to decline this invite' });
-        }
-
+        const { token } = await request.json();
+        if (typeof token !== 'string') return response(400, 'Invitation token is required');
+        const invite = await Invite.findOne({ token, inviteType: 'family', email: normalizeInviteEmail(user.email) });
+        if (!invite) return response(404, 'Invitation not found');
         await removePendingInviteMember(invite);
-        await Invite.deleteOne({ token: invite.token });
-
-        return inviteResponse({ status: 200, message: 'Invite declined' });
-    } catch (error) {
-        console.error('Invite decline error:', error);
-        return inviteResponse({ status: 500, message: 'Failed to decline invite' });
-    }
+        await Invite.deleteOne({ _id: invite._id });
+        return response(200, 'Invitation declined');
+    } catch { return response(500, 'Unable to decline invitation'); }
 }

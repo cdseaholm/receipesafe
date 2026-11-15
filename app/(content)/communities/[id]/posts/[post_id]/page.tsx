@@ -1,3 +1,5 @@
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { notFound } from 'next/navigation';
 
 import { redirect } from 'next/navigation';
 import connectDB from '@/lib/mongodb';
@@ -12,6 +14,7 @@ import { createPageMetadata } from '@/lib/metadata';
 type NestedCommunityPostPageParams = { params: Promise<{ id: string, post_id: string }> };
 
 export async function generateMetadata({ params }: NestedCommunityPostPageParams): Promise<Metadata> {
+    if (!COMMUNITIES_ENABLED) notFound();
     const { post_id } = await params;
 
     try {
@@ -32,6 +35,7 @@ export async function generateMetadata({ params }: NestedCommunityPostPageParams
 }
 
 export default async function Page({ params }: NestedCommunityPostPageParams) {
+    if (!COMMUNITIES_ENABLED) notFound();
 
     const { post_id, id } = await params;
 

@@ -35,6 +35,7 @@ import {
 } from "@tabler/icons-react";
 import { IoMdClose } from "react-icons/io";
 import { useRouter } from "next/navigation";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
 
 type MemberViewGroup = {
     label: string;
@@ -140,7 +141,7 @@ export default function ViewPage({ memberToView }: { memberToView: IUserView }) 
             });
         }
 
-        return groupList;
+        return COMMUNITIES_ENABLED ? groupList : groupList.filter(group => !group.label.includes('Communities'));
     }, [memberToView]);
 
     const totalItems = groups.reduce((total, group) => total + group.options.length, 0);
@@ -169,7 +170,7 @@ export default function ViewPage({ memberToView }: { memberToView: IUserView }) 
             icon: <IconUserCircle size={22} />,
             description: memberToView.sameFamily?.name ?? 'Not shared',
         },
-    ];
+    ].filter(stat => COMMUNITIES_ENABLED || !['Communities', 'Shared'].includes(stat.label));
 
     const formatDateValue = (dateVal: DateValue | null): string => {
         if (!dateVal) return '';
@@ -246,7 +247,7 @@ export default function ViewPage({ memberToView }: { memberToView: IUserView }) 
                             </>
                         )}
                         title={memberToView.familyMemberName || 'RecipeSafe Member'}
-                        description="Browse the recipes, communities, and shared family context this member has made visible to you."
+                        description={COMMUNITIES_ENABLED ? "Browse the recipes, communities, and shared family context this member has made visible to you." : "Browse the recipes and shared family context this member has made visible to you."}
                         aside={(
                             <Stack gap={4} align="flex-end">
                             <Text size="sm" c="dimmed">Visible items</Text>

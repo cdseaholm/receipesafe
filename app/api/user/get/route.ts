@@ -1,43 +1,8 @@
-import connectDB from "@/lib/mongodb";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { User } from "next-auth";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeEmail } from "@/lib/data-normalization";
-
+import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { toCurrentUserDTO } from '@/lib/security/user-dto';
 export async function GET() {
-    const secret = process.env.NEXTAUTH_SECRET || '';
-
-    if (!secret) {
-        return NextResponse.json({ status: 401, message: 'Incorrect secret', userInfo: {} as IUser });
-    }
-
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', userInfo: {} as IUser });
-    }
-
-    try {
-        await connectDB();
-
-        const userSesh = session?.user as User;
-        const email = normalizeEmail(userSesh?.email);
-        if (!email) {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', userInfo: {} as IUser });
-        }
-
-        const user = await MongoUser.findOne({ email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', userInfo: {} as IUser });
-        }
-
-        return NextResponse.json({ status: 200, message: 'Success!', userInfo: user });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error fetching', userInfo: {} as IUser });
-    }
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({status: 401, message: 'Unauthorized'}, {status: 401});
+  return NextResponse.json({status: 200, message: 'Success!', userInfo: toCurrentUserDTO(user)}, {headers: {'Cache-Control': 'private, no-store'}});
 }

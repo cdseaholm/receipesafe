@@ -1,51 +1,19 @@
-import connectDB from "@/lib/mongodb";
-import Inquiry from "@/models/inquiry";
-import { IInquiry } from "@/models/types/misc/inquiry";
-import { IUser } from "@/models/types/personal/user";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import MongoUser from "@/models/user";
-import { isInquiryAdminEmail, normalizeAdminEmail } from "@/lib/admin";
-import { authOptions } from "@/lib/auth/auth-options";
+import { NextRequest, NextResponse } from 'next/server';
+import { isValidObjectId } from 'mongoose';
+import Inquiry from '@/models/inquiry';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { inquiryAccessFilter } from '@/lib/inquiry-access';
+import { isSameOriginJSON } from '@/lib/security/request';
 
-export async function DELETE(req: NextRequest) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized' });
-    }
-
+export async function DELETE(request: NextRequest) {
+    const response = (status: number, message: string) => NextResponse.json({ status, message }, { status });
+    if (!isSameOriginJSON(request)) return response(403, 'Use a same-origin JSON request');
+    const user = await getCurrentUser();
+    if (!user) return response(401, 'Unauthorized');
     try {
-        const body = await req.json();
-        await connectDB();
-        const email = normalizeAdminEmail(session.user.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized' });
-        }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found' });
-        }
-
-        const inquiries = body.itemsToDelete as IInquiry[];
-
-        if (!inquiries || inquiries.length === 0 || !inquiries[0]._id) {
-            return NextResponse.json({ status: 500, message: 'Error deleting inquiry' });
-        }
-
-        const idsToDelete = inquiries.map(inq => inq._id);
-        const isAdmin = isInquiryAdminEmail(user.email);
-
-        await Inquiry.deleteMany({
-            _id: { $in: idsToDelete },
-            ...(isAdmin ? {} : { inquirerEmail: email })
-        });
-
-        return NextResponse.json({ status: 200, message: 'Successfully deleted!' });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error deleting inquiry' });
-    }
+        const { itemsToDelete: items } = await request.json();
+        if (!Array.isArray(items) || !items.length || items.length > 50 || items.some(item => !isValidObjectId(item?._id))) return response(400, 'Select valid messages');
+        await Inquiry.deleteMany({ _id: { $in: items.map(item => item._id) }, ...inquiryAccessFilter(user) });
+        return response(200, 'Messages deleted');
+    } catch { return response(500, 'Unable to delete messages'); }
 }

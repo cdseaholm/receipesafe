@@ -24,6 +24,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStateStore } from "@/context/stateStore";
 import UserSpaceTemplate from "./user-space-template";
+import ProductionFeatureNotice from '@/components/misc/production-feature-notice';
 
 const FilterModal = dynamic(() => import("@/components/modals/filter/filter-modal"), { ssr: false });
 const SortModal = dynamic(() => import("@/components/modals/sort/sort-modal"), { ssr: false });
@@ -44,6 +45,8 @@ export const filterRecipesKey = [
     { label: 'Favorites', value: 'favorites' },
     { label: 'Saved', value: 'saved' },
     { label: 'My Recipes', value: 'my_recipes' },
+    { label: 'Created personally', value: 'personal_origin' },
+    { label: 'Created for family', value: 'family_origin' },
 ];
 
 export default function RecipePage({
@@ -94,6 +97,7 @@ export default function RecipePage({
                 <ContentWrapper containedChild paddingNeeded>
                     <UserSpaceTemplate user={userInfo} primaryActionLabel="View Profile" primaryActionHref="/u/profile" />
                     <DashboardCard>
+                        <ProductionFeatureNotice label="Recipe import" features={['Import recipes']} />
                         <FilterAndSortDetailsRow
                             filterLabel={filter}
                             sortLabel={sort}

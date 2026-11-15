@@ -15,7 +15,7 @@ export default function FamilyStackTemplate({ children, user, family }: { childr
     const setUserInfo = useUserStore(state => state.setUserInfo);
     const members = family.familyMembers ?? [];
     const heritage = family.heritage ?? [];
-    const currentMember = members.find(member => member.familyMemberID === user._id || member.familyMemberEmail === user.email);
+    const currentMember = members.find(member => member.memberConnected && member.familyMemberID === user._id);
 
     useEffect(() => {
         setFamily(family);

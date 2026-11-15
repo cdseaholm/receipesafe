@@ -1,72 +1,25 @@
-import connectDB from "@/lib/mongodb";
-import Inquiry from "@/models/inquiry";
-import { IInquiry } from "@/models/types/misc/inquiry";
-import { IUser } from "@/models/types/personal/user";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import MongoUser from "@/models/user";
-import { isInquiryAdminEmail, normalizeAdminEmail } from "@/lib/admin";
-import { authOptions } from "@/lib/auth/auth-options";
+import { NextRequest, NextResponse } from 'next/server';
+import { isValidObjectId } from 'mongoose';
+import Inquiry from '@/models/inquiry';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { inquiryAccessFilter } from '@/lib/inquiry-access';
+import { isInquiryAdmin } from '@/lib/admin';
+import { isSameOriginJSON } from '@/lib/security/request';
 
-export async function PUT(req: NextRequest) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', inquiriesReturned: null });
-    }
-
+export async function PUT(request: NextRequest) {
+    const response = (status: number, message: string) => NextResponse.json({ status, message, inquiriesReturned: null }, { status });
+    if (!isSameOriginJSON(request)) return response(403, 'Use a same-origin JSON request');
+    const user = await getCurrentUser();
+    if (!user) return response(401, 'Unauthorized');
     try {
-        const body = await req.json();
-        await connectDB();
-        const email = normalizeAdminEmail(session.user.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', inquiriesReturned: null });
+        const { inquiriesToEdit: items } = await request.json();
+        if (!Array.isArray(items) || !items.length || items.length > 50 || items.some(item => !isValidObjectId(item?._id))) return response(400, 'Select valid messages');
+        for (const item of items) {
+            const update: Record<string, unknown> = { read: Boolean(item.read), updatedAt: new Date() };
+            if (isInquiryAdmin(user)) { update.handled = Boolean(item.handled); update.adminNote = typeof item.adminNote === 'string' ? item.adminNote.slice(0, 5000) : ''; }
+            await Inquiry.updateOne({ _id: item._id, ...inquiryAccessFilter(user) }, { $set: update }, { runValidators: true });
         }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', inquiriesReturned: null });
-        }
-
-        const inquiries = body.inquiriesToEdit as IInquiry[];
-
-        if (!inquiries || inquiries.length === 0 || !inquiries[0]._id) {
-            return NextResponse.json({ status: 500, message: 'Error updating inquiry', inquiriesReturned: null });
-        }
-
-        const isAdmin = isInquiryAdminEmail(user.email);
-
-        for (const inq of inquiries) {
-            const existing = await Inquiry.findById(inq._id) as IInquiry | null;
-
-            if (!existing) continue;
-
-            if (isAdmin) {
-                await Inquiry.findByIdAndUpdate(inq._id, {
-                    handled: inq.handled,
-                    adminNote: inq.adminNote || '',
-                    read: typeof inq.read === 'boolean' ? inq.read : existing.read,
-                    updatedAt: new Date()
-                }) as IInquiry;
-                continue;
-            }
-
-            if (normalizeAdminEmail(existing.inquirerEmail) !== email) {
-                continue;
-            }
-
-            await Inquiry.findByIdAndUpdate(inq._id, {
-                read: Boolean(inq.read),
-                updatedAt: new Date()
-            }) as IInquiry;
-        }
-
-        const updatedInquiries = await Inquiry.find(isAdmin ? {} : { inquirerEmail: email }).sort({ createdAt: -1 }) as IInquiry[];
-
-        return NextResponse.json({ status: 200, message: 'Success!', inquiriesReturned: updatedInquiries as IInquiry[] });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error updating inquiry', inquiriesReturned: null });
-    }
+        const inquiriesReturned = await Inquiry.find(inquiryAccessFilter(user)).sort({ createdAt: -1 }).limit(100).lean();
+        return NextResponse.json({ status: 200, message: 'Messages updated', inquiriesReturned });
+    } catch { return response(500, 'Unable to update messages'); }
 }

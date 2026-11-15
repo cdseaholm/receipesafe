@@ -1,7 +1,10 @@
+import { toPublicUserDTO } from '@/lib/security/user-dto';
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
 import SpecificCommunityPage from './components/specific-community-page';
 import connectDB from '@/lib/mongodb';
-import { IUser } from '@/models/types/personal/user';
 import User from '@/models/user';
 import { serializeDoc } from '@/utils/data/seralize';
 import Community from '@/models/community';
@@ -21,6 +24,7 @@ import { canViewCommunity, isCommunityAdmin } from '@/lib/community-utils';
 type CommunityPageParams = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: CommunityPageParams): Promise<Metadata> {
+    if (!COMMUNITIES_ENABLED) notFound();
     const { id } = await params;
 
     try {
@@ -44,6 +48,7 @@ export async function generateMetadata({ params }: CommunityPageParams): Promise
 }
 
 export default async function Page({ params }: CommunityPageParams) {
+    if (!COMMUNITIES_ENABLED) notFound();
 
     const userInfo = await getSessionUser();
 
@@ -67,7 +72,7 @@ export default async function Page({ params }: CommunityPageParams) {
             redirect("/");
         }
 
-        const community = serializeDoc<ICommunity>(communityDoc);
+        const community = serializeCommunityForClient(serializeDoc<ICommunity>(communityDoc));
         const userIsAdmin = isCommunityAdmin(community, userInfo._id);
 
         if (!canViewCommunity(community, userInfo._id)) {
@@ -105,12 +110,12 @@ export default async function Page({ params }: CommunityPageParams) {
                 : [],
         ]);
 
-        const creator = creatorDoc ? serializeDoc<IUser>(creatorDoc) : null;
-        const admins = adminsDocs ? adminsDocs.map(serializeDoc<IUser>) : [];
+        const creator = creatorDoc ? toPublicUserDTO(creatorDoc) : null;
+        const admins = adminsDocs ? adminsDocs.map(toPublicUserDTO) : [];
         const posts = postsDocs ? postsDocs.map(serializeDoc<IPost>) : [];
         const recipes = recipeDocs ? recipeDocs.map(serializeDoc<IRecipe>) : [];
         const userRecipes = userRecipeDocs ? userRecipeDocs.map(serializeDoc<IRecipe>) : [];
-        const members = communityMembers ? communityMembers.map(serializeDoc<IUser>) : [];
+        const members = communityMembers ? communityMembers.map(toPublicUserDTO) : [];
         const requests = requestDocs ? requestDocs.map(serializeDoc<IRequest>) : [];
 
         return (

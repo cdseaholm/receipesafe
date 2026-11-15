@@ -10,4 +10,9 @@ export interface IFamily {
     recipeIDs: string[];
     familyMembers: IFamilyMember[];
     heritage: HeritageType[];
+    deletedAt?: string | Date | null;
+    restoreUntil?: string | Date | null;
+    deletedByUserID?: string;
+    familyOriginRecipeIDs?: string[];
+    familyRecipeShareVersions?: { recipeID: string; version: number }[];
 }

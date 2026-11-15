@@ -73,7 +73,7 @@ export function useRecipeForm({ initialRecipe, userInfo }: { initialRecipe: IRec
             },
             secretViewerIDs: (value) => {
                 for (const val of value) {
-                    if (!/^\S+@\S+$/.test(val)) return 'Invalid email';
+                    if (!/^[a-f\d]{24}$/i.test(val) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return 'Enter a valid email address';
                 }
                 return null;
             }
@@ -82,7 +82,7 @@ export function useRecipeForm({ initialRecipe, userInfo }: { initialRecipe: IRec
     const formRef = useRef(form);
     formRef.current = form;
 
-    const handleCreate = async (redirectPath = '/u/recipes') => {
+    const handleCreate = async (redirectPath = '/u/recipes', familyId?: string) => {
         if (!userInfo) {
             toast.error("User information is missing");
             return { success: false, message: "User information is missing" };
@@ -97,7 +97,7 @@ export function useRecipeForm({ initialRecipe, userInfo }: { initialRecipe: IRec
         const values = form.getValues();
         setLoading(true);
 
-        const result = await CreateRecipe(values, redirectPath);
+        const result = await CreateRecipe(values, redirectPath, familyId);
         setLoading(false);
 
         if (!result || !result.success || !result.recipeId) {

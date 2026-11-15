@@ -15,8 +15,11 @@ export interface IRecipe {
     tags: string[];
     image: string;
     imageKey?: string;
-    // Empty creatorID means the creator deleted their account; display "Account Deleted".
+    // Empty creatorID is a legacy attribution tombstone. New account purges delete still-owned recipes.
     creatorID: string;
+    collectionOrigin?: 'personal' | 'family';
+    originFamilyID?: string;
+    familySharingVersion?: number;
     reviews: IReview[];
     recipeFor: ('personal' | 'family' | 'community')[];
     secret: boolean;

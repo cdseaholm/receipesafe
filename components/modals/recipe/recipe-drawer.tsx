@@ -164,7 +164,8 @@ export default function RecipeDrawer({ openRecipeForm }: { openRecipeForm: Recip
         const savedImageKey = form.getValues().imageKey || '';
 
         if (isCreateMode) {
-            const result = await handleCreate('/u/recipes');
+            const familyId = openRecipeForm.from === 'family' ? (openRecipeForm.fromId || userInfo?.userFamilyID || undefined) : undefined;
+            const result = await handleCreate('/u/recipes', familyId);
             if (result.success) {
                 await cleanupUnusedSessionUploads(savedImageKey);
                 closeDrawer();

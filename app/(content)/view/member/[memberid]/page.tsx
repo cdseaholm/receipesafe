@@ -16,6 +16,10 @@ import Family from "@/models/family";
 import { IFamily } from "@/models/types/family/family";
 import { getSessionUser } from "@/lib/data/user";
 import ViewPage from "@/app/(content)/u/components/view-page";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { connectedFamilyMember } from '@/lib/family-policy';
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { isAccountActiveFilter } from '@/lib/auth/policy';
 
 type MemberViewPageParams = { params: Promise<{ memberid: string }> };
 
@@ -25,7 +29,7 @@ export async function generateMetadata({ params }: MemberViewPageParams): Promis
     try {
         await connectDB();
         const userDoc = ObjectId.isValid(memberid)
-            ? await User.findById(memberid).select("name").lean()
+            ? await User.findOne({ $and: [{ _id: memberid }, isAccountActiveFilter()] }).select("name").lean()
             : null;
         const user = userDoc ? serializeDoc<IUser>(userDoc) : null;
         const userName = user?.name || "";
@@ -60,7 +64,7 @@ export default async function Page({ params }: MemberViewPageParams) {
     try {
         await connectDB();
 
-        const userDoc = await User.findOne({ _id: new ObjectId(memberid) }).lean() as IUser | null;
+        const userDoc = await User.findOne({ $and: [{ _id: new ObjectId(memberid) }, isAccountActiveFilter()] }).lean() as IUser | null;
 
         if (!userDoc) {
             redirect("/");
@@ -72,36 +76,34 @@ export default async function Page({ params }: MemberViewPageParams) {
             redirect("/");
         }
 
-        if (viewer.email === user.email) {
+        if (viewer._id === user._id) {
             redirect("/u/profile");
         }
 
         const [publicCommunityDocs, publicRecipeDocs, fetchedFamilyDoc] = await Promise.all([
-            user.communityIDs.length > 0
+            COMMUNITIES_ENABLED && user.communityIDs.length > 0
                 ? Community.find({ _id: { $in: user.communityIDs }, privacyLevel: "public" }).lean()
                 : [],
-            user.recipeIDs.length > 0
-                ? Recipe.find({ _id: { $in: user.recipeIDs }, secret: false }).lean()
-                : [],
-            user.userFamilyID
-                ? Family.findById(user.userFamilyID).lean()
+            Recipe.find({ creatorID: user._id, secret: false }).limit(100).lean(),
+            user.userFamilyID && user.userFamilyID === viewer.userFamilyID
+                ? Family.findOne({ _id: user.userFamilyID, deletedAt: null }).lean()
                 : null,
         ]);
 
-        const publicCommunities = publicCommunityDocs.map(doc => serializeDoc<ICommunity>(doc));
+        const publicCommunities = publicCommunityDocs.map(doc => serializeCommunityForClient(serializeDoc<ICommunity>(doc)));
         const publicRecipes = publicRecipeDocs.map(doc => serializeDoc<IRecipe>(doc));
         let familyInfo: IFamily | null = fetchedFamilyDoc ? serializeDoc<IFamily>(fetchedFamilyDoc) : null;
         const viewCommunityIDs = viewer.communityIDs || [];
         const overlappingCommunities = publicCommunities.filter(comm => viewCommunityIDs.includes(comm._id));
 
-        if (!viewer.userFamilyID || !user.userFamilyID || viewer.userFamilyID !== user.userFamilyID) {
+        if (!familyInfo || !connectedFamilyMember(familyInfo, viewer._id) || !connectedFamilyMember(familyInfo, user._id)) {
             familyInfo = null;
         }
 
         const memberToView: IUserView = {
             familyMemberID: user._id.toString(),
             familyMemberName: user.name,
-            familyMemberEmail: user.email,
+            familyMemberEmail: familyInfo ? user.email : '',
             publicCommunities,
             publicReviews: [],
             publicRecipes,

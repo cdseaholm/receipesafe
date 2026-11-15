@@ -1,74 +1,18 @@
-import connectDB from "@/lib/mongodb";
-import { authOptions } from "@/lib/auth/auth-options";
-import { acceptFamilyInviteForUser, findValidInviteByToken, normalizeInviteEmail } from "@/lib/invite-utils";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { User } from "next-auth";
-import { IFamilyMember } from "@/models/types/family/familyMember";
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { acceptFamilyInviteForUser, findValidInviteByToken } from '@/lib/invite-utils';
+import { isSameOriginJSON } from '@/lib/security/request';
 
-export async function POST(req: NextRequest) {
-
-    const secret = process.env.NEXTAUTH_SECRET || '';
-
-    if (!secret) {
-        return NextResponse.json({ status: 401, message: 'Incorrect secret', returnedMembers: [] as IFamilyMember[] });
-    }
-
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', returnedMembers: [] as IFamilyMember[] });
-    }
-
+export async function POST(request: NextRequest) {
+    const response = (status: number, message: string, returnedMembers: unknown[] = []) => NextResponse.json({ status, message, returnedMembers }, { status });
+    if (!isSameOriginJSON(request)) return response(403, 'Use a same-origin JSON request');
+    const user = await getCurrentUser();
+    if (!user) return response(401, 'Sign in with the verified invited email');
     try {
-        await connectDB();
-        const body = await req.json();
-        const inviteToken = typeof body.token === 'string'
-            ? body.token
-            : typeof body.invite?.token === 'string'
-                ? body.invite.token
-                : '';
-
-        if (!inviteToken) {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', returnedMembers: [] as IFamilyMember[] });
-        }
-
-        const { invite, message } = await findValidInviteByToken(inviteToken);
-
-        if (!invite) {
-            return NextResponse.json({ status: 404, message, returnedMembers: [] as IFamilyMember[] });
-        }
-
-        if ((invite.inviteType || 'family') !== 'family') {
-            return NextResponse.json({ status: 400, message: 'This is not a family invite', returnedMembers: [] as IFamilyMember[] });
-        }
-
-        const userSesh = session?.user as User;
-        const email = normalizeInviteEmail(userSesh?.email);
-        if (!email) {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', returnedMembers: [] as IFamilyMember[] });
-        }
-
-        if (email !== normalizeInviteEmail(invite.email)) {
-            return NextResponse.json({ status: 403, message: 'Sign in as the invited user to accept this invite', returnedMembers: [] as IFamilyMember[] });
-        }
-
-        const user = await MongoUser.findOne({ email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', returnedMembers: [] as IFamilyMember[] });
-        }
-
+        const body = await request.json();
+        const { invite, message } = await findValidInviteByToken(body.token || body.invite?.token);
+        if (!invite) return response(404, message);
         const accepted = await acceptFamilyInviteForUser(invite, user);
-        if (!accepted.success) {
-            return NextResponse.json({ status: accepted.status, message: accepted.message, returnedMembers: [] as IFamilyMember[] });
-        }
-
-        return NextResponse.json({ status: 200, message: 'Success!', returnedMembers: accepted.members });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error fetching', returnedMembers: [] as IFamilyMember[] });
-    }
+        return response(accepted.status, accepted.message, accepted.members);
+    } catch { return response(500, 'Unable to accept invitation'); }
 }

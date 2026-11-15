@@ -32,10 +32,10 @@ export default function SpecificMemberView({
     const [adminPassword, setAdminPassword] = useState("");
 
     const details = [
-        'Recipes Created',
-        'Date joined Family',
-        'Ratings/Comments',
-        'Communities'
+        { label: 'Recipes visible to you', value: memberToView.publicRecipes.length },
+        { label: 'Membership', value: familyMember.memberConnected ? 'Connected' : 'Invited' },
+        { label: 'Role', value: familyMember.permissionStatus },
+        { label: 'Reviews visible to you', value: memberToView.publicReviews.length },
     ];
 
     const handleUpdateStatus = () => {
@@ -114,7 +114,8 @@ export default function SpecificMemberView({
                     {details.map((det, index) => {
                         return (
                             <div className="min-w-[200px] min-h-[200px] rounded-md border border-accent/30 p-1 flex flex-col justify-center items-center text-center" key={index}>
-                                {det}
+                                <p className="font-semibold">{det.value}</p>
+                                <p className="text-sm text-mainText/70">{det.label}</p>
                             </div>
                         )
                     })}

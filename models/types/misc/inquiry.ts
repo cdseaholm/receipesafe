@@ -1,6 +1,7 @@
 import { UseFormReturnType } from "@mantine/form";
 
 export type IInquiry = {
+    inquirerUserID?: string;
     _id: string;
     inquirerEmail: string;
     inquirerName: string;

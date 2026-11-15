@@ -19,6 +19,7 @@ export default function FamilySettingsHooks() {
 
     const { data: session, update } = useSession();
     const setFamily = useFamilyStore(state => state.setFamily);
+    const setFamilyRecipes = useFamilyStore(state => state.setFamilyRecipes);
     const userInfo = useUserStore(state => state.userInfo);
     const setUserInfo = useUserStore(state => state.setUserInfo);
 
@@ -34,13 +35,13 @@ export default function FamilySettingsHooks() {
                 !value ? 'Name is required' : null
             ),
             name: (value, values) => (
-                !value ? 'Name is required' :
-                    value === values.currName ? 'New name must be different than current name' :
+                !value.trim() ? 'Name is required' : value.trim().length > 100 ? 'Use at most 100 characters' :
+                    value.trim() === values.currName.trim() ? 'New name must be different than current name' :
                         null
             ),
             namePassword: (value) => (
                 !value ? 'Password is required'
-                    : value.length < 5 ? 'Password length must be greater than 5 characters' : null
+                    : null
             )
         }
     }) as ChangeNameFormType;
@@ -127,63 +128,59 @@ export default function FamilySettingsHooks() {
 
         if (!session) {
             toast.warning('You must be signed in to make this change');
-            return;
+            return false;
         }
         const user = session.user as IUser
         if (!user) {
             toast.warning('You do not have permission to edit this')
+            return false;
         }
         if (!userFamAdminPrivs) {
             toast.error('You do not have family permissions to edit this');
-            return;
+            return false;
         }
 
         const formVals = changeFamNameForm.getValues();
-        if (!formVals) {
-            return;
-        }
+        if (!formVals || changeFamNameForm.validate().hasErrors) return false;
 
         const changed = await UpdateFamilyName(
             family._id,
-            formVals.name,
+            formVals.name.trim(),
             formVals.namePassword,
             `/family/${family._id}/settings`,
         );
         if (!changed.success) {
             toast.error(changed.message || 'Issue with changing family name');
-            return;
+            return false;
         }
-        setFamily({ ...family, name: formVals.name });
+        setFamily({ ...family, name: formVals.name.trim() });
         toast.info('Family Name changed');
-        return;
+        return true;
 
     }
 
-    const handleConfirmFam = async (userFamAdminPrivs: boolean, family: IFamily) => {
+    const handleConfirmFam = async (userFamAdminPrivs: boolean, family: IFamily, adminPassword: string, confirmationName: string) => {
 
         if (!session || !userFamAdminPrivs) {
             toast.error('You are not authorized to make this change');
-            return;
+            return false;
         }
 
-        const confirm = window.confirm('Are you sure you want to delete your family account? This will remove everything created by your family including recipes, and the family from the family members');
-        if (!confirm) {
-            return;
-        }
-
-        const attemptDelete = await DeleteFamily(family._id, '/');
+        const attemptDelete = await DeleteFamily(family._id, '/', adminPassword, confirmationName);
 
         if (!attemptDelete || attemptDelete.success === false) {
             toast.error(attemptDelete?.message || 'Error deleting family')
-            return;
+            return false;
         }
 
         setFamily({} as IFamily);
+        setFamilyRecipes([]);
         if (userInfo) {
             setUserInfo({ ...userInfo, userFamilyID: '' });
         }
         await update();
         useAlertStore.getState().setGlobalToast('Family deleted successfully');
+        return true;
 
     }
 

@@ -1,59 +1,23 @@
-import connectDB from "@/lib/mongodb";
-import Inquiry from "@/models/inquiry";
-import { IInquiry } from "@/models/types/misc/inquiry";
-import { IUser } from "@/models/types/personal/user";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import MongoUser from "@/models/user";
-import { normalizeAdminEmail } from "@/lib/admin";
-import { authOptions } from "@/lib/auth/auth-options";
-import { formatShortDate } from "@/lib/data-normalization";
+import { NextRequest, NextResponse } from 'next/server';
+import Inquiry from '@/models/inquiry';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { consumeRateLimit } from '@/lib/security/rate-limit';
+import { isSameOriginJSON } from '@/lib/security/request';
 
-export async function POST(req: NextRequest) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized' });
-    }
-
+const types = ['General', 'Bug Report', 'Feature Request', 'Suggestion', 'Other'];
+export async function POST(request: NextRequest) {
+    const response = (status: number, message: string) => NextResponse.json({ status, message }, { status });
+    if (!isSameOriginJSON(request)) return response(403, 'Use a same-origin JSON request');
+    const user = await getCurrentUser();
+    if (!user) return response(401, 'Unauthorized');
+    if (!(await consumeRateLimit(`inquiry-create:${user._id}`, { limit: 10, windowMs: 3600_000 })).allowed) return response(429, 'Please wait before submitting another message');
     try {
-        const body = await req.json();
-        await connectDB();
-        const email = normalizeAdminEmail(session.user.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized' });
-        }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found' });
-        }
-
-        const inquiry = body.inquiryPassed as IInquiry;
-        const inquiryType = inquiry.inquiryType;
-        const inquiryTitle = inquiry.inquiryTitle || `${inquiryType} ${formatShortDate(new Date())}`;
-
-        const newInquiry = await Inquiry.create({
-            inquirerEmail: normalizeAdminEmail(user.email),
-            inquirerName: user.name || user.email,
-            inquiryType,
-            inquiryTitle,
-            inquiryMessage: inquiry.inquiryMessage,
-            adminNote: '',
-            read: false,
-            handled: false,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        }) as IInquiry;
-
-        if (!newInquiry) {
-            return NextResponse.json({ status: 500, message: 'Error creating' });
-        }
-
-        return NextResponse.json({ status: 200, message: 'Success!', returnedInquiry: newInquiry as IInquiry });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error creating inquiry' });
-    }
+        const { inquiryPassed: input } = await request.json();
+        if (!input || !types.includes(input.inquiryType) || typeof input.inquiryMessage !== 'string' || !input.inquiryMessage.trim() || input.inquiryMessage.length > 5000
+            || (input.inquiryTitle != null && typeof input.inquiryTitle !== 'string')) return response(400, 'Choose an inquiry type and a message of at most 5,000 characters');
+        const returnedInquiry = await Inquiry.create({ inquirerUserID: String(user._id), inquirerName: user.name, inquirerEmail: user.email,
+            inquiryType: input.inquiryType, inquiryMessage: input.inquiryMessage.trim(), inquiryTitle: input.inquiryTitle?.trim().slice(0, 120) || input.inquiryType,
+            adminNote: '', read: false, handled: false });
+        return NextResponse.json({ status: 200, message: 'Message submitted', returnedInquiry });
+    } catch { return response(500, 'Unable to submit message'); }
 }

@@ -28,11 +28,11 @@ export default function RegisterForm({ handleRegister, loading = false }: { hand
             ),
             password: (value) => (
                 !value ? 'Password is required'
-                    : value.length < 5 ? 'Password length must be greater than 5 characters' : null
+                    : value.length < 12 ? 'Use at least 12 characters (maximum 72 UTF-8 bytes)' : null
             ),
             confirmPassword: (value, values) => (
                 !value ? 'Must confirm your password'
-                    : value.length < 5 ? 'Password length must be greater than 5 characters'
+                    : value.length < 12 ? 'Use at least 12 characters (maximum 72 UTF-8 bytes)'
                         : value !== values.password ? 'Confirm Password and Password must match'
                             : null
             )

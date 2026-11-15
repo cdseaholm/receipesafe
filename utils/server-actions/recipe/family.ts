@@ -1,73 +1,34 @@
-'use server'
-
+'use server';
 import { revalidatePath } from 'next/cache';
-import connectDB from '@/lib/mongodb';
 import Recipe from '@/models/recipe';
-import Family from '@/models/family';
+import { Types } from 'mongoose';
 import { getRevalidationPath } from './utils';
-import { getAuthenticatedFamilyContext } from '../family/utils';
+import { familyFailure, withFamilyMutation } from '@/lib/family-mutations';
 
 export async function AddRecipeToFamily(recipeId: string, familyId: string, route: string) {
-    if (!recipeId || !familyId) {
-        return { success: false, message: 'Recipe ID and Family ID are required' };
-    }
-
-    try {
-        await connectDB();
-        const { user, family, message } = await getAuthenticatedFamilyContext(familyId);
-        if (!user || !family) {
-            return { success: false, message };
-        }
-
-        const recipe = await Recipe.findById(recipeId);
-        if (!recipe) {
-            return { success: false, message: 'Recipe not found' };
-        }
-
-        const recipeCreator = recipe.creatorID === user._id.toString();
-        const explicitlyViewable = recipe.secretViewerIDs?.includes(user._id.toString()) || recipe.secretViewerIDs?.includes(user.email);
-        if (recipe.secret && !recipeCreator && !explicitlyViewable) {
-            return { success: false, message: 'Recipe not found' };
-        }
-
-        await Family.findByIdAndUpdate(family._id, {
-            $addToSet: { recipeIDs: recipeId }
-        });
-        revalidatePath(getRevalidationPath(route));
-        return { success: true, message: 'Recipe added to family successfully' };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: 'Failed to add recipe to family' };
-    }
+    if (typeof recipeId !== 'string' || !Types.ObjectId.isValid(recipeId)) return { success: false, message: 'Invalid recipe ID' };
+    const result = await withFamilyMutation(familyId, async ({ user, family, member, session }) => {
+        if (member.permissionStatus === 'Guest') return familyFailure('Family member privileges are required');
+        const recipe = await Recipe.findById(recipeId).session(session);
+        if (!recipe || (recipe.secret && recipe.creatorID !== String(user._id))) return familyFailure('Only the creator can share a private recipe');
+        // Serialize sharing with privacy updates so a concurrent public-to-private change cannot be re-shared by a non-owner.
+        await Recipe.updateOne({ _id: recipeId }, { $inc: { __v: 1 } }, { session });
+        family.recipeIDs = Array.from(new Set([...(family.recipeIDs || []), recipeId]));
+        await family.save({ session });
+        return { success: true, message: 'Recipe added to family successfully', members: family.familyMembers };
+    });
+    if (result.success) { revalidatePath(getRevalidationPath(route)); revalidatePath('/u/recipes'); }
+    return result;
 }
 
 export async function RemoveRecipesFromFamily(recipeIds: string[], familyId: string, route: string) {
-    if (!recipeIds || recipeIds.length === 0) {
-        return { success: false, message: 'Recipe IDs are required' };
-    }
-
-    if (!familyId) {
-        return { success: false, message: 'Family ID is required' };
-    }
-
-    if (!route) {
-        return { success: false, message: 'Route is required for revalidation' };
-    }
-
-    try {
-        const { user, family, message } = await getAuthenticatedFamilyContext(familyId);
-        if (!user || !family) {
-            return { success: false, message };
-        }
-
-        family.recipeIDs = family.recipeIDs.filter(id => !recipeIds.includes(id));
-        await family.save();
-
-        revalidatePath(getRevalidationPath(route));
-
-        return { success: true, message: 'Recipes removed from family successfully' };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: 'Failed to remove recipes from family' };
-    }
+    if (!Array.isArray(recipeIds) || !recipeIds.length || recipeIds.length > 100 || recipeIds.some(id => typeof id !== 'string' || !Types.ObjectId.isValid(id))) return { success: false, message: 'Select valid recipe IDs (at most 100)' };
+    const result = await withFamilyMutation(familyId, async ({ family, member, session }) => {
+        if (member.permissionStatus !== 'Admin') return familyFailure('Family admin privileges are required');
+        family.recipeIDs = (family.recipeIDs || []).filter(id => !recipeIds.includes(id));
+        await family.save({ session });
+        return { success: true, message: 'Recipes removed from family successfully', members: family.familyMembers };
+    });
+    if (result.success) { revalidatePath(getRevalidationPath(route)); revalidatePath('/u/recipes'); }
+    return result;
 }

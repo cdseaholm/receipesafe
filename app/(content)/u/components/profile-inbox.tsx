@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useUserStore } from "@/context/userStore";
+import { COMMUNITIES_ENABLED, COMMUNITIES_COMING_LATER_MESSAGE } from '@/lib/features';
 
 export type ProfileFamilyInvite = {
     email: string;
@@ -89,7 +90,7 @@ export default function ProfileInbox({ familyInvites, communityInvites, initialI
     const setInquiries = useUserStore(state => state.setInquiries);
     const { editInquiries, deleteInquiries, storedInquiries } = useInquiryActions();
     const [familyInviteItems, setFamilyInviteItems] = useState(familyInvites);
-    const [communityInviteItems, setCommunityInviteItems] = useState(communityInvites);
+    const [communityInviteItems, setCommunityInviteItems] = useState(COMMUNITIES_ENABLED ? communityInvites : []);
     const [busyToken, setBusyToken] = useState<string | null>(null);
     const [busyInquiryId, setBusyInquiryId] = useState<string | null>(null);
     const [filter, setFilter] = useState<InboxFilter>('all');
@@ -165,6 +166,7 @@ export default function ProfileInbox({ familyInvites, communityInvites, initialI
     };
 
     const handleAcceptCommunity = async (invite: ProfileCommunityInvite) => {
+        if (!COMMUNITIES_ENABLED) { toast.info(COMMUNITIES_COMING_LATER_MESSAGE); return; }
         setBusyToken(invite.token);
 
         try {
@@ -196,6 +198,7 @@ export default function ProfileInbox({ familyInvites, communityInvites, initialI
     };
 
     const handleDeclineCommunity = async (invite: ProfileCommunityInvite) => {
+        if (!COMMUNITIES_ENABLED) { toast.info(COMMUNITIES_COMING_LATER_MESSAGE); return; }
         const confirmed = window.confirm(`Decline the invite to join ${invite.communityName}?`);
         if (!confirmed) return;
 

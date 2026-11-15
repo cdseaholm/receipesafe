@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { useAlertStore } from "@/context/alertStore";
 import { useCommunityStore } from "@/context/communityStore";
 import RecipeDrawer from "../modals/recipe/recipe-drawer";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
 //import { useDataStore } from "@/context/dataStore";
 
 // Dynamically import all modals with ssr: false
@@ -51,12 +52,12 @@ export default function ModalProvider({ session, handleUpdate }: { session: Sess
             {openInquiryModal && <InquiryModal session={session} inquiry={viewSpecificInquiry} />}
             {openAddFamMemsModal && <AddFamMemsModal session={session} handleUpdate={handleUpdate} />}
             {openInviteSignInModal && <InviteSignInModal session={session} handleUpdate={handleUpdate} />}
-            {openCreateCommunityModal && <CreateCommunityModal open={openCreateCommunityModal} />}
-            {requestToJoinCommunity && <RequestModal />}
+            {COMMUNITIES_ENABLED && openCreateCommunityModal && <CreateCommunityModal open={openCreateCommunityModal} />}
+            {COMMUNITIES_ENABLED && requestToJoinCommunity && <RequestModal />}
             {openRecipeForm.type !== '' && <RecipeDrawer openRecipeForm={openRecipeForm} />}
             {alertModalOpen && <AlertModal />}
-            {openPostModal && <CreatePostModal openPostModal={openPostModal} />}
-            {editCommunity && <EditCommunity />}
+            {COMMUNITIES_ENABLED && openPostModal && <CreatePostModal openPostModal={openPostModal} />}
+            {COMMUNITIES_ENABLED && editCommunity && <EditCommunity />}
         </ModalsProvider>
     );
 }

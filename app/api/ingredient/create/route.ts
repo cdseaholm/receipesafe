@@ -1,58 +1,22 @@
-import connectDB from "@/lib/mongodb";
-import Ingredient from "@/models/ingredient";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { getServerSession, User } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import { IIngredient } from "@/models/types/recipes/ingredient";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeEmail } from "@/lib/data-normalization";
-
+import { isSameOriginJSON } from '@/lib/security/request';
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import Ingredient from '@/models/ingredient';
 export async function POST(req: NextRequest) {
-
-    const secret = process.env.NEXTAUTH_SECRET ? process.env.NEXTAUTH_SECRET : '';
-
-    if (secret === '') {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', ingredientsReturned: [] as IIngredient[] });
-    }
-
-    const session = await getServerSession(authOptions)
-
-    if (!session) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', ingredientsReturned: [] as IIngredient[] });
-    }
-
+    if (!isSameOriginJSON(req)) return NextResponse.json({ status: 403, message: 'Invalid request origin' }, { status: 403 });
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ status: 401, message: 'Unauthorized', ingredientsReturned: [] }, { status: 401 });
     try {
-        const body = await req.json();
-        await connectDB();
-        const userSesh = session?.user as User;
-        const email = normalizeEmail(userSesh?.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', ingredientsReturned: [] as IIngredient[] });
+        const raw = await req.text();
+        if (raw.length > 524288) return NextResponse.json({ status: 413, message: 'Request too large' }, { status: 413 });
+        const body = JSON.parse(raw);
+        const ingredients = body.newIngredients;
+        if (!Array.isArray(ingredients) || !ingredients.length || ingredients.length > 100 || ingredients.some(ing => typeof ing?.ingredient !== 'string' || !ing.ingredient.trim() || ing.ingredient.length > 200)) throw new Error('Invalid ingredients');
+        const ingredientsReturned = [];
+        for (const ing of ingredients) {
+            const name = ing.ingredient.trim();
+            ingredientsReturned.push(await Ingredient.findOne({ ingredient: name }) || await Ingredient.create({ ingredient: name }));
         }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', ingredientsReturned: [] as IIngredient[] });
-        }
-
-        const ingredients = body.newIngredients as IIngredient[];
-        if (!ingredients || ingredients.length <= 0) {
-            return NextResponse.json({ status: 400, message: 'No ingredients provided', ingredientsReturned: [] as IIngredient[] });
-        }
-
-        const insertResult = await Ingredient.insertMany(ingredients.map(ing => ({
-            ingredient: ing.ingredient.trim(),
-        })));
-
-        if (!insertResult || insertResult.length <= 0) {
-            return NextResponse.json({ status: 500, message: 'Error creating', ingredientsReturned: [] as IIngredient[] });
-        }
-
-        return NextResponse.json({ status: 200, message: 'Success!', ingredientsReturned: insertResult as IIngredient[] });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error creating ingredient', ingredientsReturned: [] as IIngredient[] });
-    }
+        return NextResponse.json({ status: 200, message: 'Ingredients ready', ingredientsReturned });
+    } catch { return NextResponse.json({ status: 400, message: 'Invalid ingredients', ingredientsReturned: [] }, { status: 400 }); }
 }

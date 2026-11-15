@@ -20,12 +20,21 @@ export const familySchema = new Schema(
         familyMembers: {
             type: [familyMemberSchema],
             required: false
-        }
+        },
+        deletedAt: { type: Date, default: null },
+        restoreUntil: { type: Date },
+        deletedByUserID: { type: String, default: '' },
+        familyOriginRecipeIDs: { type: [String], default: [] },
+        familyRecipeShareVersions: { type: [{ recipeID: String, version: Number }], default: [] },
     },
     {
         timestamps: true,
+        optimisticConcurrency: true,
     }
 );
+
+// Only archived families have this date. MongoDB removes the archive after 30 days.
+familySchema.index({ restoreUntil: 1 }, { expireAfterSeconds: 0 });
 
 const Family = mongoose.models?.Family || mongoose.model("Family", familySchema);
 

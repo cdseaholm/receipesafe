@@ -57,6 +57,7 @@ export default function SignInForm({ handleSignIn, handleCancel, loading = false
                 <CancelButton handleCancel={() => { signInForm.reset(); signInForm.clearErrors(); handleCancel(); }} />
                 <SubmitButton buttonTitle="Sign In" loading={loading} loadingTitle="Signing in..." />
             </section>
+            <a href="/verify-email" className="mt-4 block text-sm underline">Verify your email or recover your account</a>
         </form>
     )
 }

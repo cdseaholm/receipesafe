@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import connectDB from "@/lib/mongodb";
 import { COMMUNITY_POST_CATEGORIES, COMMUNITY_POST_TYPES, getAuthedUser, isCommunityMember, normalizeCommunityText } from "@/lib/community-utils";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,6 +11,7 @@ import { ICommunity } from "@/models/types/community/community";
 import { ObjectId } from "mongodb";
 
 export async function POST(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
 
     const { error, user } = await getAuthedUser(req);
     if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized', postReturned: null, communityReturned: null });
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
             updatedCommunity = await Community.findByIdAndUpdate(postPassed.relatedToID, { postIDs: commPosts }, { new: true });
         }
 
-        return NextResponse.json({ status: 200, message: 'Success!', postReturned: newPost, communityReturned: updatedCommunity });
+        return NextResponse.json({ status: 200, message: 'Success!', postReturned: newPost, communityReturned: updatedCommunity ? serializeCommunityForClient(updatedCommunity) : null });
 
     } catch (error: any) {
         return NextResponse.json({ status: 500, message: 'Error creating post', postReturned: null, communityReturned: null });

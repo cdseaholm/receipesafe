@@ -1,89 +1,43 @@
-'use server'
+'use server';
 
-import { revalidatePath } from "next/cache";
-import Family from "@/models/family";
-import Invite from "@/models/invite";
-import User from "@/models/user";
-import { IFamilyMember } from "@/models/types/family/familyMember";
-import { getAuthenticatedFamilyContext, getRevalidationPath, hasAdminPrivilege, verifyUserPassword } from "./utils";
-
-function normalizeMemberKey(key: string) {
-    return key.trim().toLowerCase();
-}
-
-function memberKey(member: IFamilyMember) {
-    return normalizeMemberKey(member.familyMemberID || member.familyMemberEmail);
-}
+import { revalidatePath } from 'next/cache';
+import Invite from '@/models/invite';
+import User from '@/models/user';
+import { familyMemberKey, hasConnectedAdmin } from '@/lib/family-policy';
+import { familyFailure, withFamilyMutation } from '@/lib/family-mutations';
+import { getRevalidationPath, verifyUserPassword } from './utils';
 
 export async function RemoveFamilyMembers(familyId: string, memberIds: string[], adminPassword: string, route: string) {
-    if (!memberIds?.length) {
-        return { success: false, message: "No members selected", members: [] as IFamilyMember[] };
-    }
-
-    const { user, family, member, message } = await getAuthenticatedFamilyContext(familyId);
-    if (!user || !family) return { success: false, message, members: [] as IFamilyMember[] };
-    if (!hasAdminPrivilege(member)) return { success: false, message: "Admin privileges are required", members: [] as IFamilyMember[] };
-    if (!(await verifyUserPassword(user, adminPassword))) return { success: false, message: "Password is incorrect", members: [] as IFamilyMember[] };
-
-    const uniqueMemberIds = Array.from(new Set(memberIds.map(normalizeMemberKey).filter(Boolean)));
-    const existingIds = new Set(family.familyMembers.map(memberKey));
-
-    if (uniqueMemberIds.some(memberId => !existingIds.has(memberId))) {
-        return { success: false, message: "One or more members do not belong to this family", members: family.familyMembers };
-    }
-
-    const membersToRemove = family.familyMembers.filter(familyMember => uniqueMemberIds.includes(memberKey(familyMember)));
-    const remainingMembers = family.familyMembers.filter(familyMember => !uniqueMemberIds.includes(memberKey(familyMember)));
-    if (remainingMembers.length === 0) {
-        return { success: false, message: "A family must have at least one member", members: family.familyMembers };
-    }
-
-    if (!remainingMembers.some(familyMember => familyMember.permissionStatus === "Admin")) {
-        return { success: false, message: "At least one admin is required", members: family.familyMembers };
-    }
-
-    try {
-        const connectedMemberIds = membersToRemove
-            .map(familyMember => familyMember.familyMemberID)
-            .filter(Boolean);
-        const invitedEmails = membersToRemove
-            .filter(familyMember => !familyMember.memberConnected)
-            .map(familyMember => familyMember.familyMemberEmail.trim().toLowerCase())
-            .filter(Boolean);
-
-        await Family.updateOne({ _id: family._id }, { $set: { familyMembers: remainingMembers } });
-        if (connectedMemberIds.length > 0) {
-            await User.updateMany({ _id: { $in: connectedMemberIds } }, { $set: { userFamilyID: "" } });
-        }
-        if (invitedEmails.length > 0) {
-            await Invite.deleteMany({ inviteType: 'family', familyID: familyId, email: { $in: invitedEmails } });
-        }
-        revalidatePath(getRevalidationPath(route, `/family/${familyId}/members`));
-
-        return { success: true, message: "Members removed successfully", members: remainingMembers };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: "Failed to remove members", members: [] as IFamilyMember[] };
-    }
+    if (!Array.isArray(memberIds) || !memberIds.length || memberIds.length > 100 || memberIds.some(id => typeof id !== 'string')) return familyFailure('Select valid family members');
+    const result = await withFamilyMutation(familyId, async ({ user, family, member, session }) => {
+        if (member.permissionStatus !== 'Admin') return familyFailure('Admin privileges are required');
+        if (!(await verifyUserPassword(user, adminPassword))) return familyFailure('Password is incorrect. Google users can set a password from account recovery first.');
+        const keys = new Set(memberIds.map(id => id.trim().toLowerCase()));
+        const existing = new Set(family.familyMembers.map(familyMemberKey));
+        if ([...keys].some(key => !existing.has(key))) return familyFailure('One or more members do not belong to this family');
+        const removed = family.familyMembers.filter(item => keys.has(familyMemberKey(item)));
+        const remaining = family.familyMembers.filter(item => !keys.has(familyMemberKey(item)));
+        if (!hasConnectedAdmin(remaining)) return familyFailure('At least one connected admin is required');
+        family.familyMembers = remaining;
+        await family.save({ session });
+        const ids = removed.filter(item => item.memberConnected).map(item => item.familyMemberID).filter(Boolean);
+        if (ids.length) await User.updateMany({ _id: { $in: ids }, userFamilyID: familyId }, { $set: { userFamilyID: '' } }, { session });
+        await Invite.deleteMany({ familyID: familyId, inviteType: 'family', email: { $in: removed.map(item => item.familyMemberEmail.toLowerCase()) } }, { session });
+        return { success: true, message: 'Members removed successfully', members: remaining };
+    });
+    if (result.success) revalidatePath(getRevalidationPath(route, `/family/${familyId}/members`));
+    return result;
 }
 
-export async function LeaveFamily(familyId: string, route = "/") {
-    const { user, family, member, message } = await getAuthenticatedFamilyContext(familyId);
-    if (!user || !family || !member) return { success: false, message };
-
-    const remainingMembers = family.familyMembers.filter(familyMember => familyMember !== member);
-    if (member.permissionStatus === "Admin" && !remainingMembers.some(familyMember => familyMember.permissionStatus === "Admin")) {
-        return { success: false, message: "Assign another admin before leaving this family" };
-    }
-
-    try {
-        await Family.updateOne({ _id: family._id }, { $set: { familyMembers: remainingMembers } });
-        await User.updateOne({ _id: user._id }, { $set: { userFamilyID: "" } });
-        revalidatePath(getRevalidationPath(route, "/"));
-
-        return { success: true, message: "Successfully left family" };
-    } catch (error) {
-        console.error(error);
-        return { success: false, message: "Failed to leave family" };
-    }
+export async function LeaveFamily(familyId: string, route = '/') {
+    const result = await withFamilyMutation(familyId, async ({ user, family, session }) => {
+        const remaining = family.familyMembers.filter(item => String(item.familyMemberID) !== String(user._id));
+        if (!hasConnectedAdmin(remaining)) return familyFailure('Assign another connected admin before leaving, or delete the family if you are its last member');
+        family.familyMembers = remaining;
+        await family.save({ session });
+        await User.updateOne({ _id: user._id, userFamilyID: familyId }, { $set: { userFamilyID: '' } }, { session });
+        return { success: true, message: 'Successfully left family', members: remaining };
+    });
+    if (result.success) revalidatePath(getRevalidationPath(route));
+    return result;
 }

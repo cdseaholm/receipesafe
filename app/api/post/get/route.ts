@@ -1,45 +1,18 @@
-import connectDB from "@/lib/mongodb";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse, getAuthedUser } from '@/lib/community-utils';
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { User } from "next-auth";
 import { ObjectId } from "mongodb";
 import { IPost } from "@/models/types/misc/post";
 import Community from "@/models/community";
 import Post from "@/models/post";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeEmail } from "@/lib/data-normalization";
 
 export async function GET(req: NextRequest) {
-    const secret = process.env.NEXTAUTH_SECRET || '';
-
-    if (!secret) {
-        return NextResponse.json({ status: 401, message: 'Incorrect secret', family: {} as IUser });
-    }
-
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', postReturned: [] as IPost[] });
-    }
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
+    const { error, user } = await getAuthedUser(req);
+    if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized' }, { status: 401 });
 
     try {
         const body = await req.json();
-        await connectDB();
-
-        const userSesh = session?.user as User;
-        const email = normalizeEmail(userSesh?.email);
-        if (!email) {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', postReturned: [] as IPost[] });
-        }
-
-        const user = await MongoUser.findOne({ email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', postReturned: [] as IPost[] });
-        }
-
         const communityID = body.communityID as string;
 
         if (!communityID) {

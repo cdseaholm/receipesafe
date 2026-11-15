@@ -12,6 +12,8 @@ import { IUser } from "@/models/types/personal/user";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useStateStore } from "@/context/stateStore";
+import CommunityLink from '@/components/buttons/community-link';
+import { IconUsersGroup } from '@tabler/icons-react';
 
 const recipes = <PiCookieThin />;
 const fam = <GiFamilyTree />;
@@ -106,6 +108,10 @@ export default function MenuContent({ session, profile, signOutElement, signIn, 
                     </Link>
                 )
             ))}
+            <CommunityLink className={`${buttonClass} py-3 sm:py-4 mb-1 sm:mb-2`} onNavigate={handleNavigationClick}>
+                <span className={textClass} aria-hidden="true"><IconUsersGroup size={18} /></span>
+                <span className={textClass}>Communities</span>
+            </CommunityLink>
             <Divider my={'md'} w={'100%'} h={'1px'} style={{
                 border: '1px solid color-mix(in srgb, var(--mainText) 24%, transparent)',
             }} />

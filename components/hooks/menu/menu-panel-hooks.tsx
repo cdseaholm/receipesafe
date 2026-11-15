@@ -11,6 +11,8 @@ import { useEnsureData } from "../data/useEnsureData";
 import { IRecipe } from "@/models/types/recipes/recipe";
 import { IUser } from "@/models/types/personal/user";
 import { useWindowSizes } from "@/context/width-height-store";
+import { COMMUNITIES_ENABLED, COMMUNITIES_COMING_LATER_MESSAGE } from '@/lib/features';
+import { resetSessionStores } from '@/lib/security/session-stores';
 
 export default function MenuPanelHooks() {
     
@@ -30,12 +32,16 @@ export default function MenuPanelHooks() {
     const [isPreparingModal, setIsPreparingModal] = useState(false);
 
     const handleOpenRecipeModal = async (recipe: IRecipe | null, userInfo: IUser | null, from: 'personal' | 'family' | 'community' | 'post' | null) => {
+        if (!COMMUNITIES_ENABLED && (from === 'community' || from === 'post')) {
+            toast.info(COMMUNITIES_COMING_LATER_MESSAGE);
+            return;
+        }
         setIsPreparingModal(true);
         try {
             if (userInfo && recipe && userInfo._id === recipe.creatorID) {
-                setOpenCreateRecipeModal({type: 'edit', recipe: recipe, from: from, fromId: null});
+                setOpenCreateRecipeModal({type: 'edit', recipe: recipe, from: from, fromId: from === 'family' ? userInfo?.userFamilyID || null : null});
             } else if (recipe === null) {
-                setOpenCreateRecipeModal({type: 'create', recipe: null, from: from, fromId: null});
+                setOpenCreateRecipeModal({type: 'create', recipe: null, from: from, fromId: from === 'family' ? userInfo?.userFamilyID || null : null});
             } else {
                 toast.error('Failed to load recipe data. Please try again.');
                 return;
@@ -51,6 +57,7 @@ export default function MenuPanelHooks() {
     };
 
     const signingOut = async () => {
+        resetSessionStores();
         setGlobalLoading(true);
         try {
             await signOut();

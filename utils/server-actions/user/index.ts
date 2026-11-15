@@ -1,4 +1,2 @@
-export { CreateUser } from "./create";
-export { DeleteUser } from "./delete";
-export { UpdateUser } from "./update";
-export { AcceptInvite } from "./misc";
+export { CreateUser } from './create';
+export { UpdateUser } from './update';

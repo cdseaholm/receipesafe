@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import connectDB from "@/lib/mongodb";
 import { getAuthedUser, sanitizeCommunityPayload } from "@/lib/community-utils";
 import Community from "@/models/community";
@@ -7,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcrypt-ts";
 
 export async function POST(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
 
     const { error, user } = await getAuthedUser(req);
     if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized', communityReturned: {} as ICommunity });
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
 
         await MongoUser.updateOne({ _id: userId }, { $addToSet: { communityIDs: insertedCommunity._id.toString() } });
 
-        return NextResponse.json({ status: 200, message: 'Success!', communityReturned: insertedCommunity as ICommunity });
+        return NextResponse.json({ status: 200, message: 'Success!', communityReturned: serializeCommunityForClient(insertedCommunity as ICommunity) });
 
     } catch (error: any) {
         console.error('Error creating community:', error);
