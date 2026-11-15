@@ -1,3 +1,5 @@
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import connectDB from "@/lib/mongodb";
 import { getAuthedUser } from "@/lib/community-utils";
 import MongoUser from "@/models/user";
@@ -13,6 +15,7 @@ function response(body: { status: number; message: string }, status = body.statu
 }
 
 export async function DELETE(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
 
     const { error, user } = await getAuthedUser(req);
     if (error || !user) return error || response({ status: 401, message: 'Unauthorized' });

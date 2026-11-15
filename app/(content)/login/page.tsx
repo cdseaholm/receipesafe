@@ -11,17 +11,19 @@ export const metadata: Metadata = createPageMetadata({
     robots: { index: false, follow: true },
 });
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ closed?: string; recoverBy?: string }> }) {
 
     const userInfo = await getSessionUser();
 
     if (userInfo) {
         redirect('/u/profile');
     }
+    const params = await searchParams;
+    const deadline = params.recoverBy ? new Date(params.recoverBy) : null;
 
     return (
 
-        <SignInLanding />
+        <SignInLanding closed={params.closed === '1'} recoveryDeadline={deadline && Number.isFinite(deadline.getTime()) ? deadline.toUTCString() : undefined} />
 
     );
 }

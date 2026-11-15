@@ -11,6 +11,7 @@ import { IconCheck, IconInbox, IconPlus, IconUsers, IconX } from "@tabler/icons-
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import Link from 'next/link';
 
 export type FamilyStartInvite = {
     email: string;
@@ -121,6 +122,7 @@ export default function FamilyStartPage({ user, familyInvites }: { user: IUser; 
                                     <Button type="button" variant="light" leftSection={<IconPlus size={16} />} onClick={handleCreateFamily} className="self-start">
                                         Create family
                                     </Button>
+                                    <Button component={Link} href="/family/recovery" variant="subtle" className="self-start">Recover a family</Button>
                                 </Stack>
                             </div>
 

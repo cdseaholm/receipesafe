@@ -1,82 +1,21 @@
-import connectDB from "@/lib/mongodb";
-import Recipe from "@/models/recipe";
-import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { getServerSession, User } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
-import { IRecipe } from "@/models/types/recipes/recipe";
-import { IReview } from "@/models/types/misc/review";
-import { getUploadThingKeyFromUrl } from "@/utils/uploadthing/file-key";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeEmail } from "@/lib/data-normalization";
-
+import { isSameOriginJSON } from '@/lib/security/request';
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { updateRecipeForUser } from '@/lib/recipe-mutations';
+import { revalidatePath } from 'next/cache';
 export async function PUT(req: NextRequest) {
-
-    const secret = process.env.NEXTAUTH_SECRET ? process.env.NEXTAUTH_SECRET : '';
-
-    if (secret === '') {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: {} as IRecipe });
-    }
-
-    const session = await getServerSession(authOptions)
-
-    if (!session) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: {} as IRecipe });
-    }
-
+    if (!isSameOriginJSON(req)) return NextResponse.json({ status: 403, message: 'Invalid request origin' }, { status: 403 });
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: null }, { status: 401 });
     try {
-        const body = await req.json();
-        await connectDB();
-        const userSesh = session?.user as User;
-        const email = normalizeEmail(userSesh?.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: {} as IRecipe });
-        }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', recipeReturned: {} as IRecipe });
-        }
-
-        const recipe = body.recipePassed as IRecipe;
-        const newRecipe = {
-            name: recipe.name,
-            image: recipe.image,
-            imageKey: recipe.imageKey || getUploadThingKeyFromUrl(recipe.image),
-            creatorID: user._id.toString(),
-            steps: recipe.steps,
-            reviews: [] as IReview[],
-            secret: recipe.secret,
-            secretViewerIDs: recipe.secretViewerIDs,
-            tags: recipe.tags,
-            ingredients: recipe.ingredients,
-            description: recipe.description,
-            cookingTime: recipe.cookingTime,
-            recipeFor: recipe.recipeFor,
-            //make sure when fetching recipes, if creatorID is empty, this suggests deleted user, add "Deleted User" as name
-            favoriteCount: recipe.favoriteCount,
-            saveCount: recipe.saveCount,
-            createdAt: recipe.createdAt,
-            updatedAt: recipe.updatedAt
-        } as IRecipe;
-
-        const insertedRecipe = await Recipe.create(newRecipe);
-
-        if (!insertedRecipe) {
-            return NextResponse.json({ status: 500, message: 'Error creating', recipeReturned: {} as IRecipe });
-        }
-
-        const recipeId = insertedRecipe._id;
-
-        await MongoUser.updateOne({ email: email }, { $push: { recipeIDs: recipeId.toString() } });
-
-        revalidatePath('(content)/profile');
-
-        return NextResponse.json({ status: 200, message: 'Success!', recipeReturned: insertedRecipe as IRecipe });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error creating recipe', recipeReturned: {} as IRecipe });
+        const raw = await req.text();
+        if (raw.length > 524288) return NextResponse.json({ status: 413, message: 'Request too large' }, { status: 413 });
+        const body = JSON.parse(raw);
+        const id = body.recipeId || body.recipePassed?._id;
+        const recipeReturned = await updateRecipeForUser(user, id, body.recipePassed);
+        revalidatePath('/u/recipes');
+        return NextResponse.json({ status: 200, message: 'Recipe updated', recipeReturned });
+    } catch {
+        return NextResponse.json({ status: 400, message: 'Recipe update rejected', recipeReturned: null }, { status: 400 });
     }
 }

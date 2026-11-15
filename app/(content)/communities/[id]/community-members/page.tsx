@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { notFound } from 'next/navigation';
 
 import { redirect } from 'next/navigation';
 import connectDB from '@/lib/mongodb';
@@ -18,6 +21,7 @@ import { canViewCommunity, isCommunityAdmin } from '@/lib/community-utils';
 type CommunityMembersPageParams = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: CommunityMembersPageParams): Promise<Metadata> {
+    if (!COMMUNITIES_ENABLED) notFound();
     const { id } = await params;
 
     try {
@@ -40,6 +44,7 @@ export async function generateMetadata({ params }: CommunityMembersPageParams): 
 }
 
 export default async function Page({ params }: CommunityMembersPageParams) {
+    if (!COMMUNITIES_ENABLED) notFound();
 
     const userInfo = await getSessionUser();
 
@@ -63,7 +68,7 @@ export default async function Page({ params }: CommunityMembersPageParams) {
             redirect("/");
         }
 
-        const community = serializeDoc<ICommunity>(communityDoc);
+        const community = serializeCommunityForClient(serializeDoc<ICommunity>(communityDoc));
 
         if (!community) {
             redirect("/communities");

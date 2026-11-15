@@ -1,50 +1,56 @@
+import { createUploadthing, type FileRouter } from 'uploadthing/next';
+import { UploadThingError } from 'uploadthing/server';
+import mongoose from 'mongoose';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { isAccountActive, isAccountRecoverable } from '@/lib/auth/policy';
+import connectDB from '@/lib/mongodb';
+import Upload from '@/models/upload';
+import User from '@/models/user';
+import { consumeRateLimit } from '@/lib/security/rate-limit';
+import { cleanupRejectedUpload } from '@/lib/upload-callback-cleanup';
 
-import { createUploadthing, type FileRouter } from "uploadthing/next";
-import { UploadThingError } from "uploadthing/server";
+type CompletedFile = { key: string; ufsUrl: string };
 
-const f = createUploadthing();
-
-const auth = async (_req: Request) => {
-    //this will need to be changed when expanding to others
-    //ie, they will need to sign up with email first
-    // const session = await getServerSession();
-    // if (!session?.user) throw new Error("Unauthorized");
-    return { userId: 'cdseaholm@gmail.com' };
+async function recordCompletedUpload(userId: string, file: CompletedFile) {
+    await connectDB();
+    const session = await mongoose.startSession();
+    let accepted = false;
+    try {
+        accepted = Boolean(await session.withTransaction(async () => {
+            const user = await User.findById(userId).session(session);
+            if (!user?.emailVerifiedAt || !(isAccountActive(user) || isAccountRecoverable(user))) return false;
+            // Serialize callback registration against account closure, purge and recovery.
+            const locked = await User.updateOne({ _id: userId }, { $inc: { __v: 1 } }, { session });
+            if (locked.modifiedCount !== 1) throw new UploadThingError('Account changed; retry upload completion');
+            const existing = await Upload.findOne({ key: file.key }).session(session);
+            if (existing) return existing.state === 'active';
+            await Upload.updateOne({ key: file.key }, { $setOnInsert: {
+                key: file.key, ownerId: userId, url: file.ufsUrl, recipeIds: [], state: 'active',
+            } }, { upsert: true, session });
+            return true;
+        }));
+    } finally { await session.endSession(); }
+    if (!accepted) {
+        // Storage calls stay outside Mongo transactions. The tombstone prevents resurrection on retry.
+        await cleanupRejectedUpload(userId, file);
+        throw new UploadThingError('This account no longer accepts this upload');
+    }
 }
 
-// FileRouter for your app, can contain multiple FileRoutes
+const f = createUploadthing();
 export const ourFileRouter = {
-    // Define as many FileRoutes as you like, each with a unique routeSlug
-    imageUploader: f({
-        image: {
-            /**
-             * For full list of options and defaults, see the File Route API reference
-             * @see https://docs.uploadthing.com/file-routes#route-config
-             */
-            maxFileSize: "4MB",
-            maxFileCount: 1,
-        },
-    })
-        // Set permissions and file types for this FileRoute
-        .middleware(async ({ req }) => {
-            // This code runs on your server before upload
-            const user = await auth(req);
-
-            // If you throw, the user will not be able to upload
-            if (!user) throw new UploadThingError("Unauthorized");
-
-            // Whatever is returned here is accessible in onUploadComplete as `metadata`
-            return { userId: user.userId };
+    imageUploader: f({ image: { maxFileSize: '4MB', maxFileCount: 1 } })
+        .middleware(async () => {
+            const user = await getCurrentUser();
+            if (!user) throw new UploadThingError('Unauthorized');
+            await connectDB();
+            const quota = await consumeRateLimit(`upload:${user._id}`, { limit: 40, windowMs: 3600000 });
+            if (!quota.allowed) throw new UploadThingError('Upload limit reached; try again later');
+            return { userId: String(user._id) };
         })
         .onUploadComplete(async ({ metadata, file }) => {
-            // This code RUNS ON YOUR SERVER after upload
-            console.log("Upload complete for userId:", metadata.userId);
-
-            console.log("file url", file.ufsUrl);
-
-            // !!! Whatever is returned here is sent to the clientside `onClientUploadComplete` callback
+            await recordCompletedUpload(metadata.userId, file);
             return { uploadedBy: metadata.userId };
         }),
 } satisfies FileRouter;
-
 export type OurFileRouter = typeof ourFileRouter;

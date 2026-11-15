@@ -7,7 +7,7 @@ import { IUser } from "@/models/types/personal/user"
 import { IRecipe } from "@/models/types/recipes/recipe"
 import { BiCheck } from "react-icons/bi"
 
-export default function FamilyRecipesSearchBar({recipeSearch, toggleEdit, edit, toggleChooseRecipe, toggleFilter, toggleSort, handleOpenRecipeModal, userInfo, adminPermission, setRecipeSearch}: {recipeSearch: string, toggleEdit: () => void, edit: boolean, toggleChooseRecipe: () => void, toggleFilter: () => void, toggleSort: () => void, handleOpenRecipeModal: (recipe: IRecipe | null, userInfo: IUser | null, from: "personal" | "family" | "community" | "post" | null) => Promise<void>, userInfo: any, adminPermission: boolean, setRecipeSearch: (search: string) => void}) {
+export default function FamilyRecipesSearchBar({recipeSearch, toggleEdit, edit, toggleChooseRecipe, toggleFilter, toggleSort, handleOpenRecipeModal, userInfo, adminPermission, canContribute, setRecipeSearch}: {recipeSearch: string, toggleEdit: () => void, edit: boolean, toggleChooseRecipe: () => void, toggleFilter: () => void, toggleSort: () => void, handleOpenRecipeModal: (recipe: IRecipe | null, userInfo: IUser | null, from: "personal" | "family" | "community" | "post" | null) => Promise<void>, userInfo: IUser, adminPermission: boolean, canContribute: boolean, setRecipeSearch: (search: string) => void}) {
     return (
         <SearchBarAndMenu
             handleSearch={(e) => setRecipeSearch(e.currentTarget.value)}
@@ -22,8 +22,10 @@ export default function FamilyRecipesSearchBar({recipeSearch, toggleEdit, edit, 
                 ) : (
                     <SubMenuDrop subMenu={
                         [
-                            { title: 'Create Recipe for Family', onClick: () => handleOpenRecipeModal(null, userInfo, 'family'), textClass: textClass, buttonClass: buttonClass, label: 'recipes' },
-                            { title: 'Add Recipe to Family', onClick: () => toggleChooseRecipe(), textClass: textClass, buttonClass: buttonClass, label: 'recipes' },
+                            ...(canContribute ? [
+                                { title: 'Create Recipe for Family', onClick: () => handleOpenRecipeModal(null, userInfo, 'family'), textClass: textClass, buttonClass: buttonClass, label: 'recipes' },
+                                { title: 'Add Recipe to Family', onClick: () => toggleChooseRecipe(), textClass: textClass, buttonClass: buttonClass, label: 'recipes' },
+                            ] : []),
                             ...(adminPermission ? [{ title: 'Bulk Edit', onClick: toggleEdit, textClass: textClass, buttonClass: buttonClass, label: 'recipes' }] : []),
                             { title: 'Filter', onClick: toggleFilter, textClass: textClass, buttonClass: buttonClass, label: 'view' },
                             { title: 'Sort', onClick: toggleSort, textClass: textClass, buttonClass: buttonClass, label: 'view' },

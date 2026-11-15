@@ -138,7 +138,7 @@ export default function FamilyMemberHooks() {
             permissionStatus: statusById.get(memberKey(member)) ?? member.permissionStatus,
         }));
 
-        if (!updatedMembers.some(member => member.permissionStatus === "Admin")) {
+        if (!updatedMembers.some(member => member.memberConnected && member.permissionStatus === "Admin")) {
             toast.error("At least one family admin is required");
             return;
         }
@@ -184,10 +184,10 @@ export default function FamilyMemberHooks() {
             return;
         }
 
-        const admins = familyMembers.filter((mem) => mem.permissionStatus === 'Admin');
+        const admins = familyMembers.filter(mem => mem.memberConnected && mem.permissionStatus === 'Admin');
         const checkedAdmins = memsToDelete.filter(member => member.permissionStatus === 'Admin');
         const remainingAdmins = admins.filter(admin => !memsToDelete.some(member => memberKey(member) === memberKey(admin)));
-        const removingSelf = Boolean(userInfo && memsToDelete.some(member => member.familyMemberID === userInfo._id || member.familyMemberEmail === userInfo.email));
+        const removingSelf = Boolean(userInfo && memsToDelete.some(member => member.memberConnected && member.familyMemberID === userInfo._id));
 
         if (remainingAdmins.length === 0) {
             toast.error('At least one family admin is required.');
@@ -202,7 +202,7 @@ export default function FamilyMemberHooks() {
 
             if (!userInfo) {
                 toast.info('You need to signed in to make this change');
-            } else if (!admins.some((admin) => admin.familyMemberID === userInfo._id || admin.familyMemberEmail === userInfo.email)) {
+            } else if (!admins.some(admin => admin.memberConnected && admin.familyMemberID === userInfo._id)) {
                 toast.info('You are not authorized to make that decision!')
                 return;
             }

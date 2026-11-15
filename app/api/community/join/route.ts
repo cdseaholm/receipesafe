@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import { getAuthedUser, getCommunityById, isCommunityMember } from "@/lib/community-utils";
 import Community from "@/models/community";
 import { ICommunity } from "@/models/types/community/community";
@@ -5,6 +8,7 @@ import MongoUser from "@/models/user";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
   const { error, user } = await getAuthedUser(req);
   if (error || !user) return error || NextResponse.json({ status: 401, message: 'Unauthorized' });
 
@@ -23,7 +27,7 @@ export async function POST(req: NextRequest) {
     const userId = user._id.toString();
 
     if (isCommunityMember(community, userId)) {
-      return NextResponse.json({ status: 200, message: 'Already a member', communityReturned: community });
+      return NextResponse.json({ status: 200, message: 'Already a member', communityReturned: serializeCommunityForClient(community) });
     }
 
     const [updatedCommunity] = await Promise.all([
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
       MongoUser.updateOne({ _id: userId }, { $addToSet: { communityIDs: community._id.toString() } }),
     ]);
 
-    return NextResponse.json({ status: 200, message: 'Joined community', communityReturned: updatedCommunity });
+    return NextResponse.json({ status: 200, message: 'Joined community', communityReturned: updatedCommunity ? serializeCommunityForClient(updatedCommunity) : null });
   } catch {
     return NextResponse.json({ status: 500, message: 'Error joining community' });
   }

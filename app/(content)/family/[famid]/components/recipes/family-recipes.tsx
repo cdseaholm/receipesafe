@@ -62,10 +62,9 @@ export default function FamilyRecipes({
         modalLoading
     } = useRecipeList(familyRecipes, userInfo, `/family/${family._id}/recipes`, ingredients, family);
 
-    const adminPermission = family.familyMembers.find(
-        (mem) => mem.familyMemberEmail === userInfo.email
-    )?.permissionStatus === 'Admin';
-    const familyMember = family.familyMembers.find((mem) => mem.familyMemberEmail === userInfo.email)?.permissionStatus !== 'Guest'
+    const currentMember = family.familyMembers.find(mem => mem.memberConnected && mem.familyMemberID === userInfo._id);
+    const adminPermission = currentMember?.permissionStatus === 'Admin';
+    const familyMember = Boolean(currentMember && currentMember.permissionStatus !== 'Guest');
 
     const { handleOpenRecipeModal } = MenuPanelHooks();
     const recipesPerPage = 8;
@@ -95,6 +94,7 @@ export default function FamilyRecipes({
                         handleOpenRecipeModal={handleOpenRecipeModal}
                         userInfo={userInfo}
                         adminPermission={adminPermission}
+                        canContribute={familyMember}
                         setRecipeSearch={(search) => {
                             setCurrentPage(1);
                             setRecipeSearch(search);

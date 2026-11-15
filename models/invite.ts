@@ -14,6 +14,8 @@ export const inviteSchema = new Schema(
             enum: ['family', 'community'],
             default: 'family',
         },
+        invitedByUserID: { type: String, default: '' },
+        permissionStatus: { type: String, enum: ['Guest', 'Member', 'Admin'], default: 'Member' },
         familyID: { 
             type: String, 
             required: false,

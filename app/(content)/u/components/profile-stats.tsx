@@ -1,5 +1,7 @@
 'use client'
 
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+
 import {
     IconBook2,
     IconCalendarStats,
@@ -34,7 +36,7 @@ export default function ProfileStats({
         { label: 'Ratings', value: ratingsGiven, icon: <IconStar size={22} /> },
         { label: 'Comments', value: commentsMade, icon: <IconMessageCircle size={22} /> },
         { label: 'Days', value: timeBeingMember, icon: <IconCalendarStats size={22} /> },
-    ];
+    ].filter(stat => COMMUNITIES_ENABLED || stat.label !== 'Communities');
 
     return (
         <section className="grid h-full min-h-0 grid-cols-2 grid-rows-3 gap-2 sm:grid-cols-3 sm:grid-rows-2 sm:gap-3">

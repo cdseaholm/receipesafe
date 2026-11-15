@@ -16,4 +16,14 @@ export interface IUser {
   resetPasswordExpires: string;
   bio: string;
   profileImage: string;
+  emailVerifiedAt?: Date | string | null;
+  accountStatus?: 'active' | 'deactivated' | 'purging';
+  deactivatedAt?: Date | string;
+  purgeAfter?: Date | string;
+  sessionVersion?: number;
+  googleProviderId?: string;
+  emailVerificationTokenHash?: string;
+  emailVerificationExpiresAt?: Date | string;
+  emailVerificationPurpose?: 'verify' | 'recover' | 'email-change';
+  pendingEmail?: string;
 }

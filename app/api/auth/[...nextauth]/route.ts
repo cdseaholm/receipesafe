@@ -9,13 +9,10 @@ type NextAuthContext = {
 };
 
 function syncNextAuthUrlForRequest(req: NextRequest) {
-    const host = req.headers.get("host");
-    if (!host) return;
-
-    const isLocalHost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
-    if (!isLocalHost) return;
-
-    process.env.NEXTAUTH_URL = `${req.nextUrl.protocol}//${host}`;
+    if (process.env.NODE_ENV !== 'development') return;
+    const url = new URL(req.url);
+    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') return;
+    process.env.NEXTAUTH_URL = url.origin;
 }
 
 function handler(req: NextRequest, context: NextAuthContext) {

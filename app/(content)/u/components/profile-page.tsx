@@ -33,6 +33,7 @@ import {
 } from "@tabler/icons-react";
 import { useSearchParams } from "next/navigation";
 import { useUserStore } from "@/context/userStore";
+import { COMMUNITIES_ENABLED } from '@/lib/features';
 
 type ProfilePanel = UserSpaceTab | 'stats' | 'history';
 
@@ -80,13 +81,13 @@ export default function ProfilePage({
     }, [requestedProfileTab]);
 
     const recipeCount = user.recipeIDs?.length || 0;
-    const communityCount = user.communityIDs?.length || 0;
+    const communityCount = COMMUNITIES_ENABLED ? user.communityIDs?.length || 0 : 0;
     const favoriteCount = user.favoriteRecipeIDs?.length || 0;
     const storedInquiries = useUserStore(state => state.inquiries);
     const inquiriesForBadge = storedInquiries.length > 0 ? storedInquiries : inquiries;
     const openInquiryCount = inquiriesForBadge.filter(inquiry => !inquiry.handled).length;
     const unreadInquiryCount = inquiriesForBadge.filter(inquiry => !inquiry.read).length;
-    const unreadInviteCount = familyInvites.filter(invite => !invite.read).length + communityInvites.filter(invite => !invite.read).length;
+    const unreadInviteCount = familyInvites.filter(invite => !invite.read).length + (COMMUNITIES_ENABLED ? communityInvites.filter(invite => !invite.read).length : 0);
     const fallbackInboxCount = userIsInquiryAdmin ? openInquiryCount : unreadInquiryCount + unreadInviteCount;
     const inboxCount = liveInboxCount ?? fallbackInboxCount;
     const timeBeingMember = user.createdAt
@@ -208,7 +209,7 @@ export default function ProfilePage({
                                 />
                             </Tabs.Panel>
 
-                            <Tabs.Panel value="settings" className="h-full overflow-hidden pr-1" style={{ height: '100%', minHeight: '100%' }}>
+                            <Tabs.Panel value="settings" className="h-full overflow-y-auto pr-1" style={{ height: '100%', minHeight: '100%' }}>
                                 <SettingsTab />
                             </Tabs.Panel>
                         </Box>

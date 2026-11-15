@@ -1,185 +1,53 @@
-import connectDB from "@/lib/mongodb";
-import Family from "@/models/family";
-import Recipe from "@/models/recipe";
-import { IUser } from "@/models/types/personal/user";
-import { IRecipe } from "@/models/types/recipes/recipe";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
-import MongoUser from "@/models/user";
-import Community from "@/models/community";
-import { isCommunityMember } from "@/lib/community-utils";
-import { IIngredient, IngredientForForm } from "@/models/types/recipes/ingredient";
-import Ingredient from "@/models/ingredient";
-import { getUploadThingKeyFromUrl } from "@/utils/uploadthing/file-key";
-import { getFamilyMember, hasConnectedMembership } from "@/utils/server-actions/family/utils";
-import { authOptions } from "@/lib/auth/auth-options";
-import { normalizeEmail } from "@/lib/data-normalization";
-
+import { isSameOriginJSON } from '@/lib/security/request';
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
+import { createRecipeForUser } from '@/lib/recipe-mutations';
+import Family from '@/models/family';
+import Community from '@/models/community';
+import Ingredient from '@/models/ingredient';
+import { getFamilyMember, hasConnectedMembership } from '@/utils/server-actions/family/utils';
+import { isCommunityMember } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { revalidatePath } from 'next/cache';
+import { Types } from 'mongoose';
+import { CreateRecipe } from '@/utils/server-actions/recipe/create';
+import Recipe from '@/models/recipe';
 export async function POST(req: NextRequest) {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-        return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-    }
-
+    if (!isSameOriginJSON(req)) return NextResponse.json({ status: 403, message: 'Invalid request origin' }, { status: 403 });
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: null, returnedIngredients: [] }, { status: 401 });
     try {
-        const body = await req.json();
-        await connectDB();
-        const email = normalizeEmail(session.user.email);
-        if (email === '') {
-            return NextResponse.json({ status: 401, message: 'Unauthorized', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        const user = await MongoUser.findOne({ email: email }) as IUser;
-
-        if (!user) {
-            return NextResponse.json({ status: 404, message: 'User not found', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        const recipe = body.recipePassed as IRecipe;
-
-        if (!recipe) {
-            return NextResponse.json({ status: 400, message: 'No recipe data', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        const type = body.type as 'personal' | 'family' | 'community' | 'post';
-        if (type !== 'personal' && type !== 'family' && type !== 'community' && type !== 'post') {
-            return NextResponse.json({ status: 400, message: 'Invalid type', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        const typeId = body.typeId as string;
-
-        // Only validate typeId for family and community recipes
-        if ((type === 'family' || type === 'community') && !typeId) {
-            return NextResponse.json({ status: 400, message: 'Invalid typeId required for family/community recipes', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        if (type === 'community') {
-            if (recipe.secret) {
-                return NextResponse.json({ status: 403, message: 'Private recipes may not be added to communities', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-            const community = await Community.findOne({ _id: typeId });
-            if (!community) {
-                return NextResponse.json({ status: 404, message: 'Community not found', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-            if (!isCommunityMember(community, user._id.toString())) {
-                return NextResponse.json({ status: 403, message: 'Join this community before adding recipes', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-        }
-
+        const raw = await req.text();
+        if (raw.length > 524288) return NextResponse.json({ status: 413, message: 'Request too large' }, { status: 413 });
+        const body = JSON.parse(raw);
+        const type = body.type || 'personal';
+        const typeId = body.typeId;
+        if (!['personal', 'family', 'community', 'post'].includes(type)) throw new Error('Invalid destination');
+        if ((type === 'community' || type === 'post') && !COMMUNITIES_ENABLED) return NextResponse.json({ status: 404, message: 'Not found' }, { status: 404 });
         if (type === 'family') {
-            if (typeId !== user.userFamilyID) {
-                return NextResponse.json({ status: 403, message: 'You can only add recipes to your own family', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-            const family = await Family.findOne({ _id: typeId });
-            if (!family) {
-                return NextResponse.json({ status: 404, message: 'Family not found', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-            const member = getFamilyMember(family, user);
-            if (!hasConnectedMembership(member, user)) {
-                return NextResponse.json({ status: 403, message: 'Join this family before adding recipes', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
+            if (typeof typeId !== 'string' || !Types.ObjectId.isValid(typeId) || typeId !== user.userFamilyID) throw new Error('Invalid family');
+            const family = await Family.findOne({ _id: typeId, deletedAt: null });
+            if (!family || !hasConnectedMembership(getFamilyMember(family, user), user)) throw new Error('Join the family first');
         }
-
-        const processedIngredients: IngredientForForm[] = [];
-
-        for (const recipeIng of recipe.ingredients) {
-            let dbIngredient: IIngredient | null = null;
-
-            // Try to find by ID first (if provided)
-            if (recipeIng.ingredientId) {
-                dbIngredient = await Ingredient.findById(recipeIng.ingredientId) as IIngredient;
-            }
-
-            // If not found, try by name
-            if (!dbIngredient) {
-                dbIngredient = await Ingredient.findOne({ ingredient: recipeIng.ingredient }) as IIngredient;
-            }
-
-            // If still not found, create it
-            if (!dbIngredient) {
-                dbIngredient = await Ingredient.create({ ingredient: recipeIng.ingredient }) as IIngredient;
-                console.log("Created new ingredient:", dbIngredient.ingredient);
-            }
-
-            processedIngredients.push({
-                ingredientId: dbIngredient._id.toString(),
-                ingredient: dbIngredient.ingredient,
-                quantity: recipeIng.quantity,
-            } as IngredientForForm);
+        if (type === 'community') {
+            if (typeof typeId !== 'string' || !Types.ObjectId.isValid(typeId) || body.recipePassed?.secret === true) throw new Error('Invalid community recipe');
+            const community = await Community.findById(typeId);
+            if (!community || !isCommunityMember(community, String(user._id))) throw new Error('Join the community first');
         }
-
-        const insertedRecipe = await Recipe.create({
-            name: recipe.name,
-            recipeType: recipe.recipeType,
-            cookingTime: recipe.cookingTime,
-            recipeFor: recipe.recipeFor,
-            image: recipe.image,
-            imageKey: recipe.imageKey || getUploadThingKeyFromUrl(recipe.image),
-            creatorID: user._id.toString(),
-            steps: recipe.steps,
-            reviews: recipe.reviews,
-            secret: recipe.secret,
-            secretViewerIDs: recipe.secretViewerIDs,
-            tags: recipe.tags,
-            ingredients: processedIngredients,
-            description: recipe.description,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        }) as IRecipe;
-
-        if (!insertedRecipe) {
-            return NextResponse.json({ status: 500, message: 'Error creating', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
+        let recipeReturned;
+        if (type === 'family') {
+            const result = await CreateRecipe(body.recipePassed, '/u/recipes', typeId);
+            if (!result.success || !result.recipeId) return NextResponse.json({ status: 400, message: result.message, recipeReturned: null, returnedIngredients: [] }, { status: 400 });
+            recipeReturned = await Recipe.findOne({ _id: result.recipeId, creatorID: String(user._id) });
+        } else {
+            recipeReturned = await createRecipeForUser(user, body.recipePassed);
         }
-
-
-        const recipeId = insertedRecipe._id;
-
-        await MongoUser.updateOne({ email: email }, { $push: { recipeIDs: recipeId.toString() } });
-
-        if (type === 'family' && typeId && typeId !== '') {
-            const userFam = await Family.findOne({ _id: typeId });
-            if (!userFam) {
-                //contigency
-                return NextResponse.json({ status: 206, message: 'Could not find family, otherwise created', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-            const oldRecipeIDs = userFam.recipeIDs;
-            const newRecipeIDs = [...oldRecipeIDs, insertedRecipe._id.toString()] as string[];
-            const updatedFam = await Family.updateOne({ _id: typeId }, { recipeIDs: newRecipeIDs });
-            if (!updatedFam) {
-                console.log("Failed to update family: ", userFam);
-                //contigency
-                return NextResponse.json({ status: 206, message: 'Could not update family, otherwise created', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-        } else if (type === 'community' && typeId && typeId !== '') {
-            const community = await Community.findOne({ _id: typeId });
-            if (!community) {
-                //contigency
-                return NextResponse.json({ status: 206, message: 'Could not find community, otherwise created', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-            const oldRecipes = community.recipeIDs;
-            const newRecipes = [...oldRecipes, insertedRecipe._id.toString()] as string[];
-            const updatedCommunity = await Community.updateOne({ _id: typeId }, { recipeIDs: newRecipes });
-            if (!updatedCommunity) {
-                return NextResponse.json({ status: 206, message: 'Could not update community, otherwise created', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
-            }
-
-        }
-
-        const returnedIngredients = await Ingredient.find({}).lean() as IIngredient[];
-
-        if (!returnedIngredients) {
-            return NextResponse.json({ status: 500, message: 'Error fetching ingredients', recipeReturned: insertedRecipe as IRecipe, returnedIngredients: [] as IIngredient[] });
-        }
-
-        return NextResponse.json({ status: 200, message: 'Success!', recipeReturned: insertedRecipe as IRecipe, returnedIngredients: returnedIngredients as IIngredient[] });
-
-    } catch (error: any) {
-        return NextResponse.json({ status: 500, message: 'Error creating recipe', recipeReturned: {} as IRecipe, returnedIngredients: [] as IIngredient[] });
+        if (!recipeReturned) throw new Error('Recipe not found');
+        if (type === 'community') await Community.updateOne({ _id: typeId }, { $addToSet: { recipeIDs: String(recipeReturned._id) } });
+        const returnedIngredients = await Ingredient.find({}).lean();
+        revalidatePath('/u/recipes');
+        return NextResponse.json({ status: 200, message: 'Recipe created', recipeReturned, returnedIngredients });
+    } catch {
+        return NextResponse.json({ status: 400, message: 'Recipe creation rejected', recipeReturned: null, returnedIngredients: [] }, { status: 400 });
     }
 }

@@ -1,5 +1,2 @@
-import { compareSync } from "bcrypt-ts";
-
-export async function VerifyPassword(password: string, hashedPassword: string) {
-    return compareSync(password, hashedPassword);
-}
+import 'server-only';
+export { verifyPassword as VerifyPassword } from '@/lib/auth/password';

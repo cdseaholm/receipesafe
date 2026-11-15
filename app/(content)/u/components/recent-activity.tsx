@@ -38,10 +38,10 @@ export default function RecentActivity({ recentRecipes, reviews, limit = 10, off
             <div className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-md border border-dashed border-accent/25 bg-[var(--surfaceWash)] p-8 text-center">
                 <p className="font-semibold text-mainText">No recent activity yet.</p>
                 <Link
-                    href="/u/recipes/new"
+                    href="/u/recipes"
                     className="mt-2 inline-block text-sm font-medium text-accent hover:underline"
                 >
-                    Create your first recipe
+                    Open your recipe collection
                 </Link>
             </div>
         );

@@ -3,6 +3,7 @@ import { IInquiry } from "./types/misc/inquiry";
 
 export const inquirySchema = new Schema(
     {
+        inquirerUserID: { type: String, index: true, default: '' },
         inquirerName: {
             type: String,
             required: true

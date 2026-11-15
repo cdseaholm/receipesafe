@@ -23,6 +23,9 @@ export const recipeSchema = new Schema(
       type: String,
       required: false
     },
+    collectionOrigin: { type: String, enum: ['personal', 'family'], default: 'personal' },
+    originFamilyID: { type: String, default: '', index: true },
+    familySharingVersion: { type: Number, default: 0, min: 0 },
     steps: {
       type: [{
         relatedRecipeID: String,

@@ -15,6 +15,7 @@ import RecipeDetailHooks from "../hooks/recipe-detail-hooks";
 import { toast } from "sonner";
 import { Image } from '@mantine/core';
 import ListWrapper from "@/components/wrappers/list-wrapper";
+import ProductionFeatureNotice from '@/components/misc/production-feature-notice';
 
 type RecipeDetailProps = {
     recipe: IRecipe;
@@ -87,6 +88,9 @@ export default function RecipeDetail({ recipe, currentUser, creatorName }: Recip
                                 )}
                             </div>
                         </div>
+                        <ProductionFeatureNotice label="More recipe tools"
+                            features={['Make an editable copy', 'Print recipe', 'Export recipe']}
+                            description="These tools are planned for a later update. Saving recipes and copying ingredient lists are available now." />
                         <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] lg:items-stretch">
                             <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
                                 <div className="flex flex-row flex-wrap items-center gap-2">
@@ -110,9 +114,11 @@ export default function RecipeDetail({ recipe, currentUser, creatorName }: Recip
                                         color={isFavorited ? 'red' : 'gray'}
                                         leftSection={isFavorited ? <IoHeart /> : <IoHeartOutline />}
                                         onClick={handleFavorite}
+                                        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                                        title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                                         size="sm"
                                     >
-                                        {favoriteCount}
+                                        {isFavorited ? 'Favorited' : 'Favorite'} · {favoriteCount}
                                     </Button>
                                     <Button
                                         type="button"
@@ -120,9 +126,11 @@ export default function RecipeDetail({ recipe, currentUser, creatorName }: Recip
                                         color={isSaved ? 'teal' : 'gray'}
                                         leftSection={isSaved ? <FaBookmark /> : <FaRegBookmark />}
                                         onClick={handleSave}
+                                        aria-label={isSaved ? 'Remove from saved recipes' : 'Save to my recipes'}
+                                        title="Save a reference to this recipe in your collection; the creator keeps ownership"
                                         size="sm"
                                     >
-                                        {saveCount}
+                                        {isSaved ? 'Saved' : 'Save to my recipes'} · {saveCount}
                                     </Button>
                                 </div>
                             </div>

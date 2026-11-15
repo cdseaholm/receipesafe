@@ -44,6 +44,7 @@ export default function CardTemplate({ recipeProps, communityProps, index, userI
                         </Tooltip>
 
                         <div className="flex w-content flex-row items-center justify-start gap-3">
+                            <span className="rounded-md bg-accent/10 px-2 py-1 text-xs font-medium text-accent">{recipeProps.collectionOrigin === 'family' ? 'Created for family' : 'Personal recipe'}</span>
                             {recipeProps.creatorID === userInfo?._id ? (
                                 <p className={`rounded-md px-2 py-1 text-xs font-medium ${recipeProps.secret ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{recipeProps.secret ? 'Secret' : 'Public'}</p>
                             ) : (

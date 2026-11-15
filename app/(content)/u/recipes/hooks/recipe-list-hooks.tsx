@@ -35,6 +35,8 @@ export function useRecipeList(allMixedRecipes: IRecipe[], userInfo: IUser | null
             // Apply filter
             if (filter === 'secret') return recipe.secret;
             if (filter === 'non_secret') return !recipe.secret;
+            if (filter === 'personal_origin') return recipe.collectionOrigin !== 'family';
+            if (filter === 'family_origin') return recipe.collectionOrigin === 'family';
             if (filter === 'three_stars_plus') {
                 const avgRating = recipe.reviews.reduce((acc, r) => acc + (r.rating ? r.rating : 0), 0) / recipe.reviews.length;
                 return avgRating >= 3;
@@ -61,7 +63,15 @@ export function useRecipeList(allMixedRecipes: IRecipe[], userInfo: IUser | null
             return 0;
         });
 
+    const selectableRecipes = filteredAndSorted.filter(recipe => family
+        ? family.familyMembers.some(member => member.memberConnected && member.familyMemberID === userInfo?._id && member.permissionStatus === 'Admin')
+        : recipe.creatorID === userInfo?._id);
+
     const toggleChecked = (recipeId: string) => {
+        if (!selectableRecipes.some(recipe => recipe._id === recipeId)) {
+            toast.info(family ? 'Family admin privileges are required' : 'Only recipes you created can be deleted');
+            return;
+        }
         setCheckedRecipes(prev => {
             const newSet = new Set(prev);
             if (newSet.has(recipeId)) {
@@ -83,10 +93,10 @@ export function useRecipeList(allMixedRecipes: IRecipe[], userInfo: IUser | null
     };
 
     const checkAll = () => {
-        if (checkedRecipes.size === filteredAndSorted.length) {
+        if (checkedRecipes.size === selectableRecipes.length) {
             setCheckedRecipes(new Set());
         } else {
-            setCheckedRecipes(new Set(filteredAndSorted.map(recipe => recipe._id)));
+            setCheckedRecipes(new Set(selectableRecipes.map(recipe => recipe._id)));
         }
     };
 
@@ -179,6 +189,7 @@ export function useRecipeList(allMixedRecipes: IRecipe[], userInfo: IUser | null
             setEdit(false);
             setCheckedRecipes(new Set());
             router.refresh();
+            handleModalLoading(false);
         } else {
             toast.error(result.message);
             handleModalLoading(false);

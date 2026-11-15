@@ -1,125 +1,115 @@
-'use client'
+'use client';
 
-import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
-import { IconAlertTriangle, IconInfoCircle, IconMail, IconTrash, IconUser } from "@tabler/icons-react";
-import AttemptDeleteUser from "@/utils/apihelpers/delete/deleteUser";
-import { signOut } from "next-auth/react";
-import { useState } from "react";
-import { toast } from "sonner";
+import Link from 'next/link';
+import { Alert, Button, Group, Modal, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import { IconAlertTriangle, IconInfoCircle, IconTrash } from '@tabler/icons-react';
+import AttemptDeleteUser from '@/utils/apihelpers/delete/deleteUser';
+import { signOut } from 'next-auth/react';
+import { useState } from 'react';
+import AccountSettings from './account-settings';
+import { toast } from 'sonner';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import RecipeTransfers from './recipe-transfers';
 
 export default function SettingsTab() {
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [deleteConfirmation, setDeleteConfirmation] = useState('');
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [closureModalOpen, setClosureModalOpen] = useState(false);
+    const [confirmation, setConfirmation] = useState('');
+    const [password, setPassword] = useState('');
+    const [isClosing, setIsClosing] = useState(false);
 
-    const resetDeleteModal = () => {
-        setDeleteConfirmation('');
-        setDeleteModalOpen(false);
+    const resetClosureModal = () => {
+        if (isClosing) return;
+        setConfirmation('');
+        setPassword('');
+        setClosureModalOpen(false);
     };
 
-    const handleDeleteAccount = async () => {
-        if (deleteConfirmation !== 'DELETE') {
-            toast.error('Type DELETE to confirm account deletion.');
+    const handleCloseAccount = async () => {
+        if (isClosing) return;
+        if (confirmation !== 'DELETE' || !password) {
+            toast.error('Enter your current password and type DELETE to confirm account closure.');
             return;
         }
-
-        setIsDeleting(true);
-        const result = await AttemptDeleteUser({});
-
-        if (!result.status) {
-            setIsDeleting(false);
-            return;
+        setIsClosing(true);
+        try {
+            const result = await AttemptDeleteUser({ password, confirmation });
+            if (!result.status) return;
+            const callbackUrl = `/login?closed=1${result.purgeAfter ? `&recoverBy=${encodeURIComponent(result.purgeAfter)}` : ''}`;
+            try { await signOut({ callbackUrl }); }
+            catch { window.location.assign(callbackUrl); }
+        } finally {
+            setPassword('');
+            setIsClosing(false);
         }
-
-        await signOut({ callbackUrl: '/' });
     };
-    
+
     return (
         <>
             <section className="grid h-full min-h-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
                 <Stack gap="md" className="min-h-0 rounded-md border border-accent/15 bg-secondaryBack p-4 sm:p-5">
                     <div>
                         <h2 className="mb-1 text-xl font-bold sm:text-2xl">Account Settings</h2>
-                        <Text c="dimmed" size="sm">
-                            Core profile editing is limited for the MVP. Password changes are not yet enabled in-app.
-                        </Text>
+                        <Text c="dimmed" size="sm">Keep your account details and recovery email up to date.</Text>
                     </div>
-
                     <Alert icon={<IconInfoCircle size={18} />} color="yellow" variant="light">
                         Your recipes and family data are active.
                     </Alert>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                        <TextInput label="Display name" placeholder="Coming soon" leftSection={<IconUser size={16} />} disabled />
-                        <TextInput label="Email" placeholder="Coming soon" leftSection={<IconMail size={16} />} disabled />
-                    </div>
-
-                    <Group justify="flex-start" className="mt-auto min-w-0">
-                        <Button type="button" variant="light" disabled className="w-full sm:w-auto">
-                            Change password
-                        </Button>
-                    </Group>
+                    <AccountSettings />
+                    <RecipeTransfers />
                 </Stack>
 
                 <Stack gap="md" justify="space-between" className="min-h-0 rounded-md border border-red-200/70 bg-red-50/50 p-4 sm:p-5">
                     <div>
-                        <h3 className="mb-1 text-lg font-bold text-red-700">Danger zone</h3>
+                        <h3 className="mb-1 text-lg font-bold text-red-700">Close account</h3>
                         <Text c="dimmed" size="sm">
-                            Remove this account and its connected user data when a test profile is no longer needed.
+                            Closing your account signs you out immediately and starts a 30-day recovery period.
+                            Your account ID and recipe ownership are preserved during that period.
                         </Text>
                     </div>
-
                     <Alert icon={<IconAlertTriangle size={18} />} color="red" variant="light">
-                        Assign another family or community admin before deleting if you are the only admin.
+                        Assign another connected family admin, or archive your family first, if you are its only admin.
+                        {COMMUNITIES_ENABLED && ' Community admins must also transfer administration first.'}
                     </Alert>
-
-                    <Button
-                        type="button"
-                        variant="light"
-                        color="red"
-                        leftSection={<IconTrash size={16} />}
-                        onClick={() => setDeleteModalOpen(true)}
-                        className="mt-auto w-full"
-                    >
-                        Delete account
+                    <Text size="sm">
+                        Before closing, delete recipes you no longer want or offer selected shared family recipes to an accepting family admin.
+                        After 30 days, recipes still owned by this account and the account itself are permanently deleted.
+                        Accepted transfers remain with their new owner.
+                    </Text>
+                    <Text size="sm">
+                        Recover before the deadline through <Link href="/verify-email" className="underline">email recovery</Link>.
+                        Recovery restores the same account and its remaining recipes. It does not automatically rejoin a family;
+                        request a new invitation, or recover an archived family if you are eligible.
+                    </Text>
+                    <Button type="button" variant="light" color="red" leftSection={<IconTrash size={16} />}
+                        onClick={() => setClosureModalOpen(true)} className="mt-auto w-full">
+                        Close account
                     </Button>
                 </Stack>
             </section>
 
-            <Modal
-                opened={deleteModalOpen}
-                onClose={isDeleting ? () => null : resetDeleteModal}
-                title="Delete account"
-                centered
-            >
+            <Modal opened={closureModalOpen} onClose={resetClosureModal} title="Close account for deletion" centered>
                 <Stack gap="md">
                     <Alert icon={<IconAlertTriangle size={18} />} color="red" variant="light">
-                        This permanently deletes your RecipeSafe account. If you are the only admin in a family, assign another admin before deleting your account.
+                        You will be signed out and removed from active family memberships now. You can recover this account for 30 days.
+                        After the deadline, the account and recipes that have not been transferred are permanently deleted.
                     </Alert>
-                    <Text size="sm" c="dimmed">
-                        Type DELETE to confirm.
+                    <Text size="sm">
+                        Only accepted recipe transfers change ownership. Pending offers do not prevent deletion after the deadline.
+                        If you are your family&apos;s only connected admin, transfer administration or archive the family first.
                     </Text>
-                    <TextInput
-                        label="Confirmation"
-                        value={deleteConfirmation}
-                        onChange={(event) => setDeleteConfirmation(event.currentTarget.value)}
-                        disabled={isDeleting}
-                        autoComplete="off"
-                    />
+                    <PasswordInput label="Current password" value={password}
+                        onChange={event => setPassword(event.currentTarget.value)} disabled={isClosing}
+                        autoComplete="current-password" maxLength={256} />
+                    <Text size="sm" c="dimmed">
+                        Use <Link href="/verify-email" className="underline">email recovery to set a password</Link> first if you normally sign in with Google.
+                    </Text>
+                    <TextInput label="Type DELETE to confirm" value={confirmation}
+                        onChange={event => setConfirmation(event.currentTarget.value)} disabled={isClosing}
+                        autoComplete="off" spellCheck={false} />
                     <Group justify="flex-end">
-                        <Button type="button" variant="subtle" color="gray" onClick={resetDeleteModal} disabled={isDeleting}>
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            color="red"
-                            leftSection={<IconTrash size={16} />}
-                            loading={isDeleting}
-                            disabled={deleteConfirmation !== 'DELETE'}
-                            onClick={handleDeleteAccount}
-                        >
-                            Delete account
-                        </Button>
+                        <Button type="button" variant="subtle" color="gray" onClick={resetClosureModal} disabled={isClosing}>Cancel</Button>
+                        <Button type="button" color="red" loading={isClosing} disabled={confirmation !== 'DELETE' || !password}
+                            onClick={handleCloseAccount}>Close account and sign out</Button>
                     </Group>
                 </Stack>
             </Modal>

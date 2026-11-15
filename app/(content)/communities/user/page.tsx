@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { notFound } from 'next/navigation';
 
 import NavWrapper from "@/components/wrappers/navWrapper"
 import UserCommunitiesList from "./components/user-communities";
@@ -18,6 +21,7 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default async function Page() {
+    if (!COMMUNITIES_ENABLED) notFound();
 
     const user = await getSessionUser();
 
@@ -35,7 +39,7 @@ export default async function Page() {
             }).lean();
 
             // Serialize all communities
-            userCommunities = communityDocs.map(doc => serializeDoc<ICommunity>(doc));
+            userCommunities = communityDocs.map(doc => serializeCommunityForClient(serializeDoc<ICommunity>(doc)));
         }
 
         return (

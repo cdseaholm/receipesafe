@@ -3,6 +3,16 @@ import { IInquiry } from "@/models/types/misc/inquiry";
 import { IPost } from "@/models/types/misc/post";
 import { IRecipe } from "@/models/types/recipes/recipe";
 import { create } from "zustand";
+import { COMMUNITIES_ENABLED, COMMUNITIES_COMING_LATER_MESSAGE } from '@/lib/features';
+import { toast } from 'sonner';
+
+function blockCommunityAction(opening: boolean) {
+    if (opening && !COMMUNITIES_ENABLED) {
+        toast.info(COMMUNITIES_COMING_LATER_MESSAGE);
+        return true;
+    }
+    return false;
+}
 
 
 interface ModalStore {
@@ -65,13 +75,15 @@ export const useModalStore = create<ModalStore>((set) => ({
     viewSpecificInquiry: null,
     setViewSpecificInquiry: (suggestion) => set({ viewSpecificInquiry: suggestion }),
     openCreateCommunityModal: false,
-    setOpenCreateCommunityModal: (open) => set({ openCreateCommunityModal: open }),
+    setOpenCreateCommunityModal: (open) => { if (!blockCommunityAction(open)) set({ openCreateCommunityModal: open }); },
     openCreatePostModal: false,
-    setOpenCreatePostModal: (open) => set({ openCreatePostModal: open }),
+    setOpenCreatePostModal: (open) => { if (!blockCommunityAction(open)) set({ openCreatePostModal: open }); },
     requestToJoinCommunity: null,
-    setRequestToJoinCommunity: (requestType) => set({ requestToJoinCommunity: requestType }),
+    setRequestToJoinCommunity: (requestType) => { if (!blockCommunityAction(Boolean(requestType))) set({ requestToJoinCommunity: requestType }); },
     openRecipeForm: {type: '', recipe: null, from: null, fromId: null},
-    setOpenRecipeForm: (open) => set({ openRecipeForm: open }),
+    setOpenRecipeForm: (open) => {
+        if (!blockCommunityAction(open.type !== '' && (open.from === 'community' || open.from === 'post'))) set({ openRecipeForm: open });
+    },
     openPostModal: null,
-    setOpenPostModal: (post) => set({ openPostModal: post }),
+    setOpenPostModal: (post) => { if (!blockCommunityAction(Boolean(post))) set({ openPostModal: post }); },
 }));

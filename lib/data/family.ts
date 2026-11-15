@@ -8,10 +8,12 @@ import { IUser } from "@/models/types/personal/user";
 import { redirect } from 'next/navigation';
 import { getSessionUser } from './user';
 import { hasConnectedMembership, getFamilyMember } from '@/utils/server-actions/family/utils';
+import { isValidObjectId } from 'mongoose';
 
 export const getFamilyById = cache(async (famid: string): Promise<IFamily | null> => {
+    if (!isValidObjectId(famid)) return null;
     await connectDB();
-    const doc = await Family.findById(famid).lean();
+    const doc = await Family.findOne({ _id: famid, deletedAt: null }).lean();
     return doc ? serializeDoc<IFamily>(doc) : null;
 })
 

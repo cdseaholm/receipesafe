@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import RightsFooter from "./rightsFoot";
 import Link from "next/link";
 import { useFamilyStore } from "@/context/familyStore";
+import CommunityLink from '@/components/buttons/community-link';
 
 const FooterColumn = ({ children }: { children: React.ReactNode }) => {
     return (
@@ -68,6 +69,7 @@ export default function MainFooter() {
                         </Link>
                     )
                 })}
+                {section === 'Pages' && <CommunityLink className={footerButtonText}>Communities</CommunityLink>}
             </FooterColumn>
         )
     });

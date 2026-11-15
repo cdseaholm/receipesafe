@@ -23,8 +23,8 @@ export default async function Page({ params }: FamilyRecipesPageParams) {
     const { user, family } = await getValidatedFamilyAccess(famid);
 
     const [userRecipes, familyRecipes, ingredients] = await Promise.all([
-        getRecipesByIds(user.recipeIDs ?? []),
-        getRecipesByIds(family.recipeIDs ?? []),
+        getRecipesByIds(user.recipeIDs ?? [], user),
+        getRecipesByIds(family.recipeIDs ?? [], user),
         getAllIngredients(),
     ]);
 

@@ -24,7 +24,7 @@ export default function FamilyDashboard({ family }: { family: IFamily }) {
     const recipes = family.recipeIDs ?? [];
     const heritage = family.heritage ?? [];
     
-    const adminCount = members.filter(member => member.permissionStatus === 'Admin').length;
+    const adminCount = members.filter(member => member.memberConnected && member.permissionStatus === 'Admin').length;
     const connectedCount = members.filter(member => member.memberConnected).length;
 
     const stats = [

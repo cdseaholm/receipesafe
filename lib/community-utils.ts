@@ -1,13 +1,11 @@
-import { authOptions } from "@/lib/auth/auth-options";
-import connectDB from "@/lib/mongodb";
 import Community from "@/models/community";
 import { ICommunity } from "@/models/types/community/community";
 import { IUser } from "@/models/types/personal/user";
-import MongoUser from "@/models/user";
-import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { normalizeEmail, normalizeId } from "./data-normalization";
+import { normalizeId } from "./data-normalization";
+import { COMMUNITIES_ENABLED, COMMUNITIES_COMING_LATER_MESSAGE } from './features';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
 export const COMMUNITY_PRIVACY_LEVELS = ['public', 'private', 'hidden', 'restricted', 'passwordProtected'] as const;
 export const COMMUNITY_POST_TYPES = ['recipe', 'text'] as const;
@@ -72,21 +70,21 @@ function apiResponse(body: { status: number; message: string }, status = body.st
   return NextResponse.json(body, { status });
 }
 
-export async function getAuthedUser(_req: NextRequest) {
-  const secret = process.env.NEXTAUTH_SECRET || '';
-  if (!secret) {
-    return { error: apiResponse({ status: 401, message: 'Unauthorized' }), user: null as IUser | null };
+export function communityUnavailableResponse() {
+  return apiResponse({ status: 404, message: COMMUNITIES_COMING_LATER_MESSAGE });
+}
+
+export function serializeCommunityForClient<T extends Partial<ICommunity>>(community: T): T {
+  const safe = JSON.parse(JSON.stringify(community)) as T;
+  delete safe.communityPassword;
+  return safe;
+}
+
+export async function getAuthedUser(_req: Request) {
+  if (!COMMUNITIES_ENABLED) {
+    return { error: communityUnavailableResponse(), user: null as IUser | null };
   }
-
-  const session = await getServerSession(authOptions);
-
-  const email = normalizeEmail(session?.user?.email);
-  if (!session || !email) {
-    return { error: apiResponse({ status: 401, message: 'Unauthorized' }), user: null as IUser | null };
-  }
-
-  await connectDB();
-  const user = await MongoUser.findOne({ email }) as IUser | null;
+  const user = await getCurrentUser();
   if (!user) {
     return { error: apiResponse({ status: 401, message: 'Unauthorized' }), user: null as IUser | null };
   }
@@ -95,6 +93,7 @@ export async function getAuthedUser(_req: NextRequest) {
 }
 
 export async function getCommunityById(communityId: string) {
+  if (!COMMUNITIES_ENABLED) return null;
   if (!ObjectId.isValid(communityId)) return null;
   return await Community.findById(communityId) as ICommunity | null;
 }

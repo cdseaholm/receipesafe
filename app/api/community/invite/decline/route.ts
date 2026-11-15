@@ -1,3 +1,5 @@
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { communityUnavailableResponse } from '@/lib/community-utils';
 import { getAuthedUser } from "@/lib/community-utils";
 import { normalizeInviteEmail } from "@/lib/invite-utils";
 import Invite from "@/models/invite";
@@ -9,6 +11,7 @@ function response(body: { status: number; message: string }, status = body.statu
 }
 
 export async function POST(req: NextRequest) {
+    if (!COMMUNITIES_ENABLED) return communityUnavailableResponse();
     const { error, user } = await getAuthedUser(req);
     if (error || !user) return error || response({ status: 401, message: 'Unauthorized' });
 

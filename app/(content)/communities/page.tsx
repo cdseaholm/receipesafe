@@ -1,3 +1,6 @@
+import { serializeCommunityForClient } from '@/lib/community-utils';
+import { COMMUNITIES_ENABLED } from '@/lib/features';
+import { notFound } from 'next/navigation';
 
 import { redirect } from 'next/navigation';
 import { ICommunity } from '@/models/types/community/community';
@@ -16,6 +19,7 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default async function Page(props: { searchParams: Promise<{ page?: string, size?: string, search?: string, sort?: string, filter?: string[], status?: string }> }) {
+    if (!COMMUNITIES_ENABLED) notFound();
 
   const searchParams = await props.searchParams;
 
@@ -38,7 +42,7 @@ export default async function Page(props: { searchParams: Promise<{ page?: strin
       getSessionUser(),
       Community.find({}).lean(),
     ]);
-    const allCommunities = allCommunitiesDocs.map(doc => serializeDoc<ICommunity>(doc));
+    const allCommunities = allCommunitiesDocs.map(doc => serializeCommunityForClient(serializeDoc<ICommunity>(doc)));
 
     let userCommunities = [] as ICommunity[];
     if (user) {

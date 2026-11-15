@@ -3,7 +3,7 @@ import NavWrapper from '@/components/wrappers/navWrapper';
 import { DashboardCard, DashboardHeader } from '@/components/layout/page-shells';
 import { getSessionUser } from '@/lib/data/user';
 import { createPageMetadata } from '@/lib/metadata';
-import { isAppAdminEmail } from '@/lib/admin';
+import { isAppAdmin } from '@/lib/admin';
 import { redirect } from 'next/navigation';
 import { Metadata } from 'next';
 import { MdImageSearch } from 'react-icons/md';
@@ -26,7 +26,7 @@ export default async function Page() {
         redirect('/');
     }
 
-    if (!isAppAdminEmail(user.email)) {
+    if (!isAppAdmin(user)) {
         redirect('/u/profile');
     }
 

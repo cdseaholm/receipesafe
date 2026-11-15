@@ -1,57 +1,15 @@
 'use server'
-
 import { revalidatePath } from 'next/cache';
-import Recipe from '@/models/recipe';
-import User from '@/models/user';
-import { getAuthenticatedUser, getRevalidationPath, isValidId } from './utils';
-import { IRecipe } from '@/models/types/recipes/recipe';
-import { DeleteUploadThingFiles } from '../uploadthing/delete-files';
-import { getUploadThingKeyFromUrl } from '@/utils/uploadthing/file-key';
-
+import { deleteRecipesForUser } from '@/lib/recipe-mutations';
+import { getAuthenticatedUser, getRevalidationPath } from './utils';
 export async function DeleteRecipes(recipeIds: string[], route: string) {
-    if (!recipeIds || recipeIds.length === 0) {
-        return { success: false, message: 'Recipe IDs are required' };
-    }
-
-    const uniqueRecipeIds = Array.from(new Set(recipeIds));
-    if (!uniqueRecipeIds.every(isValidId)) {
-        return { success: false, message: 'Invalid recipe ID' };
-    }
-
-    if (!route) {
-        return { success: false, message: 'Route is required for revalidation' };
-    }
-
+    const { user, message } = await getAuthenticatedUser();
+    if (!user) return { success: false, message };
     try {
-        const { user, message } = await getAuthenticatedUser();
-        if (!user) {
-            return { success: false, message };
-        }
-
-        const userId = user._id.toString();
-        const ownedRecipes = await Recipe.find({
-            _id: { $in: uniqueRecipeIds },
-            creatorID: userId,
-        }).select('_id image imageKey').lean<IRecipe[]>();
-
-        const ownedRecipeIds = ownedRecipes.map(recipe => recipe._id.toString());
-        if (ownedRecipeIds.length !== uniqueRecipeIds.length) {
-            return { success: false, message: 'Only recipes you created can be deleted' };
-        }
-
-        await Recipe.deleteMany({ _id: { $in: ownedRecipeIds }, creatorID: userId });
-
-        await DeleteUploadThingFiles(ownedRecipes.map(recipe => recipe.imageKey || getUploadThingKeyFromUrl(recipe.image)));
-
-        await User.findByIdAndUpdate(user._id, {
-            $pull: { recipeIDs: { $in: ownedRecipeIds } }
-        });
-
+        await deleteRecipesForUser(user, recipeIds);
         revalidatePath(getRevalidationPath(route));
-
         return { success: true, message: 'Recipes deleted successfully' };
     } catch (error) {
-        console.error(error);
-        return { success: false, message: 'Failed to delete recipes' };
+        return { success: false, message: error instanceof Error ? error.message : 'Failed to delete recipes' };
     }
 }
